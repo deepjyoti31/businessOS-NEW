@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import tempfile
+import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -117,9 +118,13 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
 def generate_summary(text: str, max_length: int = 500) -> str:
     """Generate a summary of the document text."""
     response = document_agent.run(
-        f"Generate a concise summary (maximum {max_length} characters) of the following document: {text[:10000]}..."
+        f"Generate a concise summary (maximum {max_length} characters) of the following document. Do not include any markdown formatting or labels like 'Summary:' in your response: {text[:10000]}..."
     )
-    return response.content[:max_length]
+    # Clean up any remaining markdown or "Summary:" labels
+    summary = response.content[:max_length]
+    summary = re.sub(r'^\s*\*+\s*Summary:?\s*\*+\s*', '', summary, flags=re.IGNORECASE)
+    summary = re.sub(r'^\s*Summary:?\s*', '', summary, flags=re.IGNORECASE)
+    return summary
 
 
 def extract_entities(text: str) -> Entity:

@@ -338,14 +338,14 @@ const Analysis = () => {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-sm">{documentMetadata.summary}</p>
+                          <p className="text-sm">{documentMetadata.summary?.replace(/^\*\*Summary:\*\*\s*/i, '')}</p>
                         </CardContent>
                       </Card>
                     </TabsContent>
 
                     <TabsContent value="entities" className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {documentMetadata.entities && (
+                        {documentMetadata.entities && typeof documentMetadata.entities === 'object' ? (
                           <>
                             <Card>
                               <CardHeader className="pb-2">
@@ -356,7 +356,7 @@ const Analysis = () => {
                               </CardHeader>
                               <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.entities.people && documentMetadata.entities.people.length > 0 ? (
+                                  {documentMetadata.entities.people && Array.isArray(documentMetadata.entities.people) && documentMetadata.entities.people.length > 0 ? (
                                     documentMetadata.entities.people.map((person: string, index: number) => (
                                       <Badge key={index} variant="secondary">{person}</Badge>
                                     ))
@@ -376,7 +376,7 @@ const Analysis = () => {
                               </CardHeader>
                               <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.entities.organizations && documentMetadata.entities.organizations.length > 0 ? (
+                                  {documentMetadata.entities.organizations && Array.isArray(documentMetadata.entities.organizations) && documentMetadata.entities.organizations.length > 0 ? (
                                     documentMetadata.entities.organizations.map((org: string, index: number) => (
                                       <Badge key={index} variant="secondary">{org}</Badge>
                                     ))
@@ -396,7 +396,7 @@ const Analysis = () => {
                               </CardHeader>
                               <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.entities.locations && documentMetadata.entities.locations.length > 0 ? (
+                                  {documentMetadata.entities.locations && Array.isArray(documentMetadata.entities.locations) && documentMetadata.entities.locations.length > 0 ? (
                                     documentMetadata.entities.locations.map((location: string, index: number) => (
                                       <Badge key={index} variant="secondary">{location}</Badge>
                                     ))
@@ -416,7 +416,7 @@ const Analysis = () => {
                               </CardHeader>
                               <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.entities.dates && documentMetadata.entities.dates.length > 0 ? (
+                                  {documentMetadata.entities.dates && Array.isArray(documentMetadata.entities.dates) && documentMetadata.entities.dates.length > 0 ? (
                                     documentMetadata.entities.dates.map((date: string, index: number) => (
                                       <Badge key={index} variant="secondary">{date}</Badge>
                                     ))
@@ -436,7 +436,7 @@ const Analysis = () => {
                               </CardHeader>
                               <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.entities.key_terms && documentMetadata.entities.key_terms.length > 0 ? (
+                                  {documentMetadata.entities.key_terms && Array.isArray(documentMetadata.entities.key_terms) && documentMetadata.entities.key_terms.length > 0 ? (
                                     documentMetadata.entities.key_terms.map((term: string, index: number) => (
                                       <Badge key={index} variant="secondary">{term}</Badge>
                                     ))
@@ -447,6 +447,12 @@ const Analysis = () => {
                               </CardContent>
                             </Card>
                           </>
+                        ) : (
+                          <Card className="md:col-span-2">
+                            <CardContent className="py-4">
+                              <p className="text-sm text-muted-foreground text-center">No entity data available</p>
+                            </CardContent>
+                          </Card>
                         )}
                       </div>
                     </TabsContent>
@@ -460,15 +466,20 @@ const Analysis = () => {
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          {documentMetadata.topics && Object.keys(documentMetadata.topics).length > 0 ? (
+                          {documentMetadata.topics && typeof documentMetadata.topics === 'object' && Object.keys(documentMetadata.topics).length > 0 ? (
                             <div className="space-y-4">
                               {Object.entries(documentMetadata.topics).map(([topic, confidence]: [string, any]) => (
                                 <div key={topic} className="space-y-1">
                                   <div className="flex justify-between text-sm">
                                     <span>{topic}</span>
-                                    <span className="font-medium">{Math.round(confidence * 100)}%</span>
+                                    <span className="font-medium">
+                                      {typeof confidence === 'number' ? `${Math.round(confidence * 100)}%` : 'N/A'}
+                                    </span>
                                   </div>
-                                  <Progress value={confidence * 100} className="h-2" />
+                                  <Progress
+                                    value={typeof confidence === 'number' ? confidence * 100 : 0}
+                                    className="h-2"
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -497,7 +508,7 @@ const Analysis = () => {
                                       Overall Sentiment
                                       {getSentimentIcon(documentMetadata.sentiment.overall)}
                                     </span>
-                                    <span className="font-medium">{documentMetadata.sentiment.overall}</span>
+                                    <span className="font-medium">{documentMetadata.sentiment.overall || 'neutral'}</span>
                                   </div>
                                   <Progress
                                     value={documentMetadata.sentiment.score !== undefined && documentMetadata.sentiment.score !== null
@@ -524,7 +535,7 @@ const Analysis = () => {
                               <div className="space-y-2">
                                 <h4 className="text-sm font-medium">Key Phrases</h4>
                                 <div className="flex flex-wrap gap-2">
-                                  {documentMetadata.sentiment.key_phrases && documentMetadata.sentiment.key_phrases.length > 0 ? (
+                                  {documentMetadata.sentiment.key_phrases && Array.isArray(documentMetadata.sentiment.key_phrases) && documentMetadata.sentiment.key_phrases.length > 0 ? (
                                     documentMetadata.sentiment.key_phrases.map((phrase: string, index: number) => (
                                       <Badge key={index} variant="secondary">{phrase}</Badge>
                                     ))

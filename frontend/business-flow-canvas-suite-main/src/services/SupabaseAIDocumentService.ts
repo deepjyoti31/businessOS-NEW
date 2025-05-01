@@ -258,7 +258,20 @@ export class SupabaseAIDocumentService {
         throw error;
       }
 
-      return data || null;
+      if (!data) {
+        return null;
+      }
+
+      // Parse JSON strings
+      const parsedData = {
+        ...data,
+        entities: data.entities ? JSON.parse(data.entities) : null,
+        topics: data.topics ? JSON.parse(data.topics) : null,
+        sentiment: data.sentiment ? JSON.parse(data.sentiment) : null
+      };
+
+      console.log('Parsed document metadata:', parsedData);
+      return parsedData;
     } catch (error) {
       console.error('Error getting document metadata:', error);
       return null;

@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import tempfile
+import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -92,9 +93,13 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
 def generate_summary(text: str, max_length: int = 500) -> str:
     """Generate a summary of the document text."""
     response = document_agent.run(
-        f"Generate a concise summary (maximum {max_length} characters) of the following document: {text[:10000]}..."
+        f"Generate a concise summary (maximum {max_length} characters) of the following document. Do not include any markdown formatting or labels like 'Summary:' in your response: {text[:10000]}..."
     )
-    return response.content[:max_length]
+    # Clean up any remaining markdown or "Summary:" labels
+    summary = response.content[:max_length]
+    summary = re.sub(r'^\s*\*+\s*Summary:?\s*\*+\s*', '', summary, flags=re.IGNORECASE)
+    summary = re.sub(r'^\s*Summary:?\s*', '', summary, flags=re.IGNORECASE)
+    return summary
 
 def extract_entities(text: str) -> Dict[str, List[str]]:
     """Extract entities from the document text."""
@@ -105,13 +110,13 @@ def extract_entities(text: str) -> Dict[str, List[str]]:
     - locations: Geographic locations mentioned
     - dates: Any dates or time periods mentioned
     - key_terms: Important domain-specific terms or jargon
-    
+
     Document text:
     {text}
-    
+
     Format your response as valid JSON only, with no additional text.
     """
-    
+
     response = document_agent.run(prompt.format(text=text[:10000]))
     try:
         # Extract JSON from the response
@@ -123,7 +128,7 @@ def extract_entities(text: str) -> Dict[str, List[str]]:
             json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
         else:
             json_str = content
-            
+
         return json.loads(json_str)
     except Exception as e:
         print(f"Error parsing entity extraction response: {e}")
@@ -140,13 +145,13 @@ def classify_topics(text: str) -> Dict[str, float]:
     prompt = """
     Classify the document into relevant topics. Return the results as a JSON object with topics as keys and confidence scores (0.0 to 1.0) as values.
     Include only topics with a confidence score of 0.5 or higher.
-    
+
     Document text:
     {text}
-    
+
     Format your response as valid JSON only, with no additional text.
     """
-    
+
     response = document_agent.run(prompt.format(text=text[:10000]))
     try:
         # Extract JSON from the response
@@ -158,7 +163,7 @@ def classify_topics(text: str) -> Dict[str, float]:
             json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
         else:
             json_str = content
-            
+
         return json.loads(json_str)
     except Exception as e:
         print(f"Error parsing topic classification response: {e}")
@@ -172,13 +177,13 @@ def analyze_sentiment(text: str) -> Dict[str, Any]:
     - score: Sentiment score from -1.0 (very negative) to 1.0 (very positive)
     - confidence: Confidence in the sentiment analysis from 0.0 to 1.0
     - key_phrases: List of key phrases that influenced the sentiment analysis
-    
+
     Document text:
     {text}
-    
+
     Format your response as valid JSON only, with no additional text.
     """
-    
+
     response = document_agent.run(prompt.format(text=text[:10000]))
     try:
         # Extract JSON from the response
@@ -190,7 +195,7 @@ def analyze_sentiment(text: str) -> Dict[str, Any]:
             json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
         else:
             json_str = content
-            
+
         return json.loads(json_str)
     except Exception as e:
         print(f"Error parsing sentiment analysis response: {e}")
@@ -212,27 +217,27 @@ def process_document(file_id: str, file_path: str, file_type: str) -> Dict[str, 
     try:
         # Update processing status
         supabase_client.table("files").update({"processing_status": "processing"}).eq("id", file_id).execute()
-        
+
         # Extract text from the document
         text = extract_text_from_file(file_path, file_type)
         if not text:
             raise ValueError("Failed to extract text from document")
-        
+
         # Generate summary
         summary = generate_summary(text)
-        
+
         # Extract entities
         entities = extract_entities(text)
-        
+
         # Classify topics
         topics = classify_topics(text)
-        
+
         # Analyze sentiment
         sentiment = analyze_sentiment(text)
-        
+
         # Generate embedding
         embedding = generate_embedding(text)
-        
+
         # Update document metadata in Supabase
         supabase_client.table("files").update({
             "summary": summary,
@@ -242,14 +247,14 @@ def process_document(file_id: str, file_path: str, file_type: str) -> Dict[str, 
             "processed_at": datetime.now().isoformat(),
             "processing_status": "completed"
         }).eq("id", file_id).execute()
-        
+
         # Store embedding in document_embeddings table
         supabase_client.table("document_embeddings").upsert({
             "id": file_id,
             "embedding": embedding,
             "created_at": datetime.now().isoformat()
         }).execute()
-        
+
         return {
             "success": True,
             "file_id": file_id,
@@ -263,7 +268,7 @@ def process_document(file_id: str, file_path: str, file_type: str) -> Dict[str, 
         supabase_client.table("files").update({
             "processing_status": "failed"
         }).eq("id", file_id).execute()
-        
+
         print(f"Error processing document {file_id}: {e}")
         return {
             "success": False,
@@ -278,20 +283,20 @@ def process_document_from_storage(file_id: str) -> Dict[str, Any]:
         response = supabase_client.table("files").select("*").eq("id", file_id).execute()
         if not response.data:
             raise ValueError(f"File with ID {file_id} not found")
-        
+
         file_metadata = response.data[0]
         file_path = file_metadata.get("path", "")
         file_type = file_metadata.get("type", "")
-        
+
         # Download the file from Supabase Storage
         user_id = file_metadata.get("user_id", "")
         storage_path = f"{user_id}/{file_path}"
-        
+
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             response = supabase_client.storage.from_("documents").download(storage_path)
             temp_file.write(response)
             temp_file_path = temp_file.name
-        
+
         try:
             # Process the document
             result = process_document(file_id, temp_file_path, file_type)
@@ -306,7 +311,7 @@ def process_document_from_storage(file_id: str) -> Dict[str, Any]:
         supabase_client.table("files").update({
             "processing_status": "failed"
         }).eq("id", file_id).execute()
-        
+
         return {
             "success": False,
             "file_id": file_id,
@@ -318,7 +323,7 @@ def search_similar_documents(query_text: str, match_threshold: float = 0.7, matc
     try:
         # Generate embedding for the query text
         query_embedding = generate_embedding(query_text)
-        
+
         # Search for similar documents using the search_documents function
         response = supabase_client.rpc(
             "search_documents",
@@ -328,17 +333,17 @@ def search_similar_documents(query_text: str, match_threshold: float = 0.7, matc
                 "match_count": match_count
             }
         ).execute()
-        
+
         if not response.data:
             return []
-        
+
         # Get file metadata for the matching documents
         file_ids = [item["id"] for item in response.data]
         files_response = supabase_client.table("files").select("*").in_("id", file_ids).execute()
-        
+
         if not files_response.data:
             return []
-        
+
         # Combine similarity scores with file metadata
         result = []
         for file in files_response.data:
@@ -347,10 +352,10 @@ def search_similar_documents(query_text: str, match_threshold: float = 0.7, matc
                 **file,
                 "similarity": similarity
             })
-        
+
         # Sort by similarity (highest first)
         result.sort(key=lambda x: x["similarity"], reverse=True)
-        
+
         return result
     except Exception as e:
         print(f"Error searching similar documents: {e}")
@@ -360,25 +365,25 @@ def search_similar_documents(query_text: str, match_threshold: float = 0.7, matc
 def handle_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
     """Handle API requests to the document processing service."""
     action = request_data.get("action")
-    
+
     if action == "process_document":
         file_id = request_data.get("file_id")
         if not file_id:
             return {"success": False, "error": "Missing file_id parameter"}
-        
+
         return process_document_from_storage(file_id)
-    
+
     elif action == "search_documents":
         query_text = request_data.get("query_text")
         if not query_text:
             return {"success": False, "error": "Missing query_text parameter"}
-        
+
         match_threshold = request_data.get("match_threshold", 0.7)
         match_count = request_data.get("match_count", 10)
-        
+
         results = search_similar_documents(query_text, match_threshold, match_count)
         return {"success": True, "results": results}
-    
+
     else:
         return {"success": False, "error": f"Unknown action: {action}"}
 
