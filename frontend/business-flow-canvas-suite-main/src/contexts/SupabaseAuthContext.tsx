@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase, User, Session } from "@/config/supabaseClient";
@@ -30,6 +30,11 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Refs to track visibility changes and prevent unwanted redirects
+  const isVisibilityChangeRef = useRef(false);
+  const lastPathRef = useRef<string | null>(null);
+  const initialSessionProcessedRef = useRef(false);
+
   // Convert Supabase user to our AuthUser format
   const convertSupabaseUser = (user: User): AuthUser => {
     console.log("Converting Supabase user:", user);
@@ -47,25 +52,65 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     return authUser;
   };
 
+  // Handle visibility change events
+  useEffect(() => {
+    // Function to handle visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // When the browser is minimized, store the current path
+        lastPathRef.current = location.pathname;
+        localStorage.setItem('businessos-last-path', location.pathname);
+      } else if (document.visibilityState === 'visible') {
+        // When the browser is restored, set the visibility change flag
+        // This will completely block any navigation attempts
+        isVisibilityChangeRef.current = true;
+
+        // Reset the flag after a longer delay to ensure all auth events are processed
+        setTimeout(() => {
+          isVisibilityChangeRef.current = false;
+        }, 5000);
+
+        // Force the current path to stay the same using history API
+        if (lastPathRef.current && lastPathRef.current !== window.location.pathname) {
+          window.history.replaceState(null, '', lastPathRef.current);
+        }
+      }
+    };
+
+    // Add event listener for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [location.pathname]);
+
   // Check if user is authenticated on initial load
   useEffect(() => {
     const checkUser = async () => {
       try {
         setIsLoading(true);
-        
+
         // Get the current session
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error("Error getting session:", error);
           setUser(null);
           return;
         }
-        
+
+        // Restore the last path if it exists
+        const storedPath = localStorage.getItem('businessos-last-path');
+        if (storedPath) {
+          lastPathRef.current = storedPath;
+        }
+
         if (session?.user) {
           const authUser = convertSupabaseUser(session.user);
           setUser(authUser);
-          
+
           // Store in localStorage for backward compatibility
           try {
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
@@ -73,13 +118,16 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
           } catch (storageError) {
             console.error("Failed to store user data:", storageError);
           }
+
+          // Mark that we've processed the initial session
+          initialSessionProcessedRef.current = true;
         } else {
           // No session, check localStorage as fallback
           console.log("No Supabase session found, checking localStorage as fallback");
-          
+
           try {
             const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
-            
+
             if (storedUser) {
               try {
                 const parsedUser = JSON.parse(storedUser);
@@ -109,28 +157,40 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log("Auth state changed:", event, session?.user?.email);
-        
+        // Check if this is happening during a visibility change
+        const isVisibilityEvent = isVisibilityChangeRef.current;
+
+        // Only log if not a visibility event to reduce console noise
+        if (!isVisibilityEvent) {
+          console.log("Auth state changed:", event, session?.user?.email);
+        }
+
         if (session?.user) {
+          // Always update the user state, but don't navigate during visibility changes
           const authUser = convertSupabaseUser(session.user);
           setUser(authUser);
-          
+
           // Store in localStorage for backward compatibility
           try {
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
           } catch (storageError) {
             console.error("Failed to store user data:", storageError);
           }
-          
-          if (event === 'SIGNED_IN') {
+
+          // Only navigate and show toast on explicit sign-in (not INITIAL_SESSION),
+          // and never during visibility changes
+          if (event === 'SIGNED_IN' && !isVisibilityEvent) {
             toast.success("Login successful!");
             navigate('/dashboard');
           }
         } else {
+          // Always update the user state
           setUser(null);
           localStorage.removeItem(AUTH_STORAGE_KEY);
-          
-          if (event === 'SIGNED_OUT') {
+
+          // Only navigate and show toast on explicit sign-out,
+          // and never during visibility changes
+          if (event === 'SIGNED_OUT' && !isVisibilityEvent) {
             toast.info("You have been logged out.");
             navigate('/login');
           }
@@ -149,16 +209,37 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
 
   // Handle route protection
   useEffect(() => {
+    // Completely skip route protection during visibility changes
+    if (isVisibilityChangeRef.current) {
+      // Force the current path to stay the same using history API
+      const storedPath = lastPathRef.current;
+      if (storedPath && storedPath !== window.location.pathname) {
+        // Use history API directly to avoid React Router's navigation
+        window.history.replaceState(null, '', storedPath);
+      }
+      return;
+    }
+
     if (!isLoading) {
       const publicPaths = ['/login', '/register', '/forgot-password', '/'];
       const isPublicPath = publicPaths.includes(location.pathname);
 
+      // Store the current path for authenticated users on non-public paths
+      if (user && !isPublicPath) {
+        lastPathRef.current = location.pathname;
+        localStorage.setItem('businessos-last-path', location.pathname);
+      }
+
+      // Normal authentication flow (only when not during visibility change)
       if (!user && !isPublicPath) {
-        console.log("User not authenticated, redirecting to login");
         navigate('/login', { replace: true });
       } else if (user && isPublicPath && location.pathname !== '/') {
-        console.log("User is authenticated, redirecting to dashboard");
-        navigate('/dashboard', { replace: true });
+        // If we have a stored path from a previous session, use that instead of dashboard
+        if (lastPathRef.current && lastPathRef.current !== '/' && lastPathRef.current !== '/login') {
+          navigate(lastPathRef.current, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       }
     }
   }, [user, isLoading, location.pathname, navigate]);
@@ -205,7 +286,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log("Registration successful:", data);
-      
+
       // If email confirmation is required
       if (data.user && !data.user.confirmed_at) {
         toast.info("Please check your email to confirm your account.");
@@ -224,11 +305,11 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      
+
       if (error) {
         throw error;
       }
-      
+
       // Clear local state
       setUser(null);
       localStorage.removeItem(AUTH_STORAGE_KEY);

@@ -5,12 +5,16 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
 import EnhancedAiAssistant from "@/components/dashboard/EnhancedAiAssistant";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisibilityProtection } from "@/hooks/use-visibility-protection";
 import TeamCollaboration from "@/components/dashboard/TeamCollaboration";
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isMobile = useIsMobile();
-  
+
+  // Use the visibility protection hook to prevent unwanted navigation
+  useVisibilityProtection();
+
   // Auto-collapse sidebar on mobile
   useEffect(() => {
     if (isMobile) {
@@ -48,7 +52,7 @@ const DashboardLayout = () => {
         }}
       >
         <TopNav onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-        
+
         {/* Page content */}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <Outlet />
