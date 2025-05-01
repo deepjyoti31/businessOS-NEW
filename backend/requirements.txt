@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+supabase
+pydantic
+httpx
+python-jose
+agno
+pypdf
+python-docx
+aiofiles
+psycopg2-binary  # For PostgreSQL connection
+numpy  # For vector operations
+openai
+azure-ai-inference
+aiohttp

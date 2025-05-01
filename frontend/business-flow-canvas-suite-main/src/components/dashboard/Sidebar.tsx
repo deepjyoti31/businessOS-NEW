@@ -33,7 +33,8 @@ import {
   Wallet,
   Headphones,
   Folder,
-  Megaphone
+  Megaphone,
+  FileSearch
 } from "lucide-react";
 
 interface SidebarProps {
@@ -389,6 +390,11 @@ const Sidebar = ({ className }: SidebarProps) => {
       title: "All Files",
       href: "/dashboard/documents/all-files",
       icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      title: "AI Document Analysis",
+      href: "/dashboard/documents/analysis",
+      icon: <FileSearch className="h-4 w-4" />,
     },
     {
       title: "Shared",

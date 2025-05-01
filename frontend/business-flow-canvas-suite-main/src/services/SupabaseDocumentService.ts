@@ -1,4 +1,5 @@
 import { supabaseStorageService, FileMetadata, UploadOptions } from './supabaseStorageService';
+import { supabase } from '@/config/supabaseClient';
 import { toast } from 'sonner';
 
 export class SupabaseDocumentService {
@@ -23,8 +24,8 @@ export class SupabaseDocumentService {
    * @returns The metadata of the uploaded file
    */
   async uploadFile(
-    file: File, 
-    folderPath: string = '', 
+    file: File,
+    folderPath: string = '',
     parentId: string | null = null,
     options: UploadOptions = {}
   ): Promise<FileMetadata | null> {
@@ -43,7 +44,7 @@ export class SupabaseDocumentService {
    * @returns The metadata of the created folder
    */
   async createFolder(
-    folderName: string, 
+    folderName: string,
     parentPath: string = '',
     parentId: string | null = null
   ): Promise<FileMetadata | null> {
@@ -182,17 +183,58 @@ export class SupabaseDocumentService {
   }
 
   /**
+   * Get all files and folders (non-archived)
+   * @returns Array of all file and folder metadata
+   */
+  async getAllFiles(): Promise<FileMetadata[]> {
+    try {
+      const { data, error } = await supabase
+        .from('files')
+        .select('*')
+        .eq('is_archived', false)
+        .order('is_folder', { ascending: false })
+        .order('name');
+
+      if (error) {
+        throw error;
+      }
+
+      // Convert snake_case to camelCase
+      return data.map(item => ({
+        id: item.id,
+        name: item.name,
+        path: item.path,
+        size: item.size,
+        type: item.type,
+        isFolder: item.is_folder,
+        parentId: item.parent_id,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+        lastAccessedAt: item.last_accessed_at,
+        storagePath: item.storage_path,
+        isFavorite: item.is_favorite,
+        isArchived: item.is_archived,
+        metadata: item.metadata
+      }));
+    } catch (error) {
+      console.error('Error getting all files:', error);
+      toast.error(`Failed to get files: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return [];
+    }
+  }
+
+  /**
    * Format file size to human-readable format
    * @param bytes The file size in bytes
    * @returns Formatted file size string
    */
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }
