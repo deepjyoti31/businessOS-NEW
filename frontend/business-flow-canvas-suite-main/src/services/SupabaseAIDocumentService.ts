@@ -32,6 +32,77 @@ export interface DocumentSearchResponse {
   error?: string;
 }
 
+export interface ComparisonSection {
+  title: string;
+  content: string;
+}
+
+export interface DocumentSimilarity {
+  overall_similarity: number;
+  content_similarity: number;
+  structure_similarity: number;
+  topic_similarity: number;
+}
+
+export interface DocumentDifference {
+  unique_to_first: string[];
+  unique_to_second: string[];
+  contradictions: string[];
+}
+
+export interface DocumentComparisonResult {
+  success: boolean;
+  file_id_1: string;
+  file_id_2: string;
+  file_name_1?: string;
+  file_name_2?: string;
+  summary: string;
+  similarities: DocumentSimilarity;
+  differences: DocumentDifference;
+  common_topics: string[];
+  sections: ComparisonSection[];
+  error?: string;
+}
+
+export interface TemplateField {
+  name: string;
+  description: string;
+  type: 'text' | 'number' | 'date' | 'select' | 'boolean';
+  required: boolean;
+  default?: string;
+  options?: string[];
+}
+
+export interface DocumentTemplate {
+  id?: string;
+  name: string;
+  description: string;
+  category: string;
+  format: 'docx' | 'txt' | 'md' | 'html';
+  content: string;
+  fields: TemplateField[];
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_public: boolean;
+  tags: string[];
+}
+
+export interface ContentGenerationRequest {
+  template_id?: string;
+  template_name?: string;
+  description?: string;
+  format: 'docx' | 'txt' | 'md' | 'html';
+  fields: Record<string, any>;
+}
+
+export interface ContentGenerationResult {
+  success: boolean;
+  content?: string;
+  format: 'docx' | 'txt' | 'md' | 'html';
+  error?: string;
+}
+
 export class SupabaseAIDocumentService {
   constructor() {
     // No need for Node.js-specific initialization in the browser
@@ -322,6 +393,298 @@ export class SupabaseAIDocumentService {
     }
 
     return results;
+  }
+
+  /**
+   * Compare two documents semantically and analyze their similarities and differences
+   * @param fileId1 The ID of the first file to compare
+   * @param fileId2 The ID of the second file to compare
+   * @returns The comparison result
+   */
+  async compareDocuments(fileId1: string, fileId2: string): Promise<DocumentComparisonResult> {
+    try {
+      // Ensure both documents have been processed
+      const status1 = await this.getProcessingStatus(fileId1);
+      const status2 = await this.getProcessingStatus(fileId2);
+
+      if (status1 !== 'completed') {
+        // Process the first document if it hasn't been processed yet
+        await this.processDocument(fileId1);
+      }
+
+      if (status2 !== 'completed') {
+        // Process the second document if it hasn't been processed yet
+        await this.processDocument(fileId2);
+      }
+
+      try {
+        // Call the FastAPI backend to compare the documents
+        const response = await fetch('http://localhost:8000/api/documents/compare', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            file_id_1: fileId1,
+            file_id_2: fileId2
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`API error: ${errorData.detail || response.statusText}`);
+        }
+
+        // Parse the response
+        const result: DocumentComparisonResult = await response.json();
+        return result;
+      } catch (apiError) {
+        console.error('Error calling document comparison API:', apiError);
+
+        // If the API call fails, provide a fallback response
+        return {
+          success: false,
+          file_id_1: fileId1,
+          file_id_2: fileId2,
+          summary: 'Failed to compare documents',
+          similarities: {
+            overall_similarity: 0,
+            content_similarity: 0,
+            structure_similarity: 0,
+            topic_similarity: 0
+          },
+          differences: {
+            unique_to_first: [],
+            unique_to_second: [],
+            contradictions: []
+          },
+          common_topics: [],
+          sections: [
+            {
+              title: 'Error',
+              content: `Failed to compare documents: ${apiError instanceof Error ? apiError.message : String(apiError)}`
+            }
+          ],
+          error: apiError instanceof Error ? apiError.message : String(apiError)
+        };
+      }
+    } catch (error) {
+      console.error('Error in compareDocuments:', error);
+      return {
+        success: false,
+        file_id_1: fileId1,
+        file_id_2: fileId2,
+        summary: 'Failed to compare documents',
+        similarities: {
+          overall_similarity: 0,
+          content_similarity: 0,
+          structure_similarity: 0,
+          topic_similarity: 0
+        },
+        differences: {
+          unique_to_first: [],
+          unique_to_second: [],
+          contradictions: []
+        },
+        common_topics: [],
+        sections: [
+          {
+            title: 'Error',
+            content: `Failed to compare documents: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Get all document templates
+   * @param category Optional category to filter templates
+   * @param userId Optional user ID to filter templates
+   * @returns List of document templates
+   */
+  async getTemplates(category?: string, userId?: string): Promise<DocumentTemplate[]> {
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (category) params.append('category', category);
+      if (userId) params.append('user_id', userId);
+
+      // Call the FastAPI backend to get templates
+      const response = await fetch(`http://localhost:8000/api/documents/templates?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      // Parse the response
+      const templates: DocumentTemplate[] = await response.json();
+      return templates;
+    } catch (error) {
+      console.error('Error getting templates:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a document template by ID
+   * @param templateId The ID of the template to get
+   * @returns The document template
+   */
+  async getTemplateById(templateId: string): Promise<DocumentTemplate | null> {
+    try {
+      // Call the FastAPI backend to get the template
+      const response = await fetch(`http://localhost:8000/api/documents/templates/${templateId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      // Parse the response
+      const template: DocumentTemplate = await response.json();
+      return template;
+    } catch (error) {
+      console.error(`Error getting template ${templateId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a new document template
+   * @param template The template to create
+   * @param userId The ID of the user creating the template
+   * @returns The created template
+   */
+  async createTemplate(template: DocumentTemplate, userId: string): Promise<DocumentTemplate | null> {
+    try {
+      // Call the FastAPI backend to create the template
+      const response = await fetch(`http://localhost:8000/api/documents/templates?user_id=${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(template)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      // Parse the response
+      const createdTemplate: DocumentTemplate = await response.json();
+      return createdTemplate;
+    } catch (error) {
+      console.error('Error creating template:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update an existing document template
+   * @param templateId The ID of the template to update
+   * @param template The updated template data
+   * @param userId The ID of the user updating the template
+   * @returns The updated template
+   */
+  async updateTemplate(templateId: string, template: DocumentTemplate, userId: string): Promise<DocumentTemplate | null> {
+    try {
+      // Call the FastAPI backend to update the template
+      const response = await fetch(`http://localhost:8000/api/documents/templates/${templateId}?user_id=${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(template)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      // Parse the response
+      const updatedTemplate: DocumentTemplate = await response.json();
+      return updatedTemplate;
+    } catch (error) {
+      console.error(`Error updating template ${templateId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a document template
+   * @param templateId The ID of the template to delete
+   * @param userId The ID of the user deleting the template
+   * @returns Whether the deletion was successful
+   */
+  async deleteTemplate(templateId: string, userId: string): Promise<boolean> {
+    try {
+      // Call the FastAPI backend to delete the template
+      const response = await fetch(`http://localhost:8000/api/documents/templates/${templateId}?user_id=${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error deleting template ${templateId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Generate document content using AI
+   * @param request The content generation request
+   * @returns The generated content
+   */
+  async generateDocumentContent(request: ContentGenerationRequest): Promise<ContentGenerationResult> {
+    try {
+      // Call the FastAPI backend to generate content
+      const response = await fetch('http://localhost:8000/api/documents/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API error: ${errorData.detail || response.statusText}`);
+      }
+
+      // Parse the response
+      const result: ContentGenerationResult = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Error generating document content:', error);
+      return {
+        success: false,
+        format: request.format,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 }
 

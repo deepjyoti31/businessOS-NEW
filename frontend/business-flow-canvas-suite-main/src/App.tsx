@@ -43,6 +43,7 @@ import BusinessIntelligence from "./pages/modules/BusinessIntelligence";
 import DocumentsDashboard from "./pages/modules/documents/Dashboard";
 import AllFiles from "./pages/modules/documents/AllFiles";
 import Analysis from "./pages/modules/documents/Analysis";
+import Compare from "./pages/modules/documents/Compare";
 import Shared from "./pages/modules/documents/Shared";
 import Templates from "./pages/modules/documents/Templates";
 import Archive from "./pages/modules/documents/Archive";
@@ -175,6 +176,7 @@ const App = () => (
                 <Route index element={<DocumentsDashboard />} />
                 <Route path="all-files" element={<AllFiles />} />
                 <Route path="analysis" element={<Analysis />} />
+                <Route path="compare" element={<Compare />} />
                 <Route path="shared" element={<Shared />} />
                 <Route path="templates" element={<Templates />} />
                 <Route path="archive" element={<Archive />} />

@@ -35,6 +35,15 @@ from app.models.documents import (
     BatchProcessingResult,
     DocumentSearchResponse,
     DocumentSearchResult,
+    DocumentComparisonRequest,
+    DocumentComparisonResult,
+    DocumentSimilarity,
+    DocumentDifference,
+    ComparisonSection,
+    ContentGenerationRequest,
+    ContentGenerationResult,
+    DocumentTemplate,
+    TemplateField,
     Entity,
     Sentiment,
     FileMetadata
@@ -778,5 +787,787 @@ async def search_documents(query_text: str, match_threshold: float = 0.5, match_
         return DocumentSearchResponse(
             success=False,
             results=[],
+            error=str(e)
+        )
+
+
+async def compare_documents(file_id_1: str, file_id_2: str) -> DocumentComparisonResult:
+    """Compare two documents semantically and analyze their similarities and differences."""
+    try:
+        print(f"Starting document comparison between {file_id_1} and {file_id_2}")
+
+        # Get file metadata for both documents
+        try:
+            response_1 = supabase_client.table("files").select("*").eq("id", file_id_1).execute()
+            response_2 = supabase_client.table("files").select("*").eq("id", file_id_2).execute()
+
+            if not response_1.data:
+                raise ValueError(f"File with ID {file_id_1} not found")
+            if not response_2.data:
+                raise ValueError(f"File with ID {file_id_2} not found")
+
+            file_metadata_1 = response_1.data[0]
+            file_metadata_2 = response_2.data[0]
+
+            file_name_1 = file_metadata_1.get("name", "Document 1")
+            file_name_2 = file_metadata_2.get("name", "Document 2")
+
+            print(f"Comparing '{file_name_1}' with '{file_name_2}'")
+        except Exception as e:
+            print(f"Error getting file metadata: {e}")
+            raise
+
+        # Get document text and embeddings
+        try:
+            # Check if documents have been processed
+            if file_metadata_1.get("processing_status") != "completed":
+                print(f"Document {file_id_1} has not been processed yet. Processing now...")
+                await process_document(file_id_1)
+                # Refresh metadata
+                response_1 = supabase_client.table("files").select("*").eq("id", file_id_1).execute()
+                file_metadata_1 = response_1.data[0]
+
+            if file_metadata_2.get("processing_status") != "completed":
+                print(f"Document {file_id_2} has not been processed yet. Processing now...")
+                await process_document(file_id_2)
+                # Refresh metadata
+                response_2 = supabase_client.table("files").select("*").eq("id", file_id_2).execute()
+                file_metadata_2 = response_2.data[0]
+
+            # Get summaries
+            summary_1 = file_metadata_1.get("summary", "")
+            summary_2 = file_metadata_2.get("summary", "")
+
+            # Get topics
+            topics_1 = json.loads(file_metadata_1.get("topics", "{}")) if file_metadata_1.get("topics") else {}
+            topics_2 = json.loads(file_metadata_2.get("topics", "{}")) if file_metadata_2.get("topics") else {}
+
+            # Get embeddings
+            embedding_response_1 = supabase_client.table("document_embeddings").select("embedding").eq("id", file_id_1).execute()
+            embedding_response_2 = supabase_client.table("document_embeddings").select("embedding").eq("id", file_id_2).execute()
+
+            if not embedding_response_1.data or not embedding_response_2.data:
+                raise ValueError("Embeddings not found for one or both documents")
+
+            embedding_1 = embedding_response_1.data[0].get("embedding", [])
+            embedding_2 = embedding_response_2.data[0].get("embedding", [])
+
+            # Calculate cosine similarity between embeddings
+            try:
+                import numpy as np
+                from sklearn.metrics.pairwise import cosine_similarity
+
+                # Convert embeddings to numpy arrays of floats
+                embedding_1_array = np.array(embedding_1, dtype=float).reshape(1, -1)
+                embedding_2_array = np.array(embedding_2, dtype=float).reshape(1, -1)
+
+                similarity_score = float(cosine_similarity(embedding_1_array, embedding_2_array)[0][0])
+            except ImportError:
+                # Fallback to a simple dot product similarity if numpy/sklearn is not available
+                print("Warning: numpy or sklearn not available, using fallback similarity calculation")
+
+                try:
+                    # Print debug info about embeddings
+                    print(f"Embedding 1 type: {type(embedding_1)}, length: {len(embedding_1)}")
+                    print(f"Embedding 2 type: {type(embedding_2)}, length: {len(embedding_2)}")
+                    if embedding_1 and isinstance(embedding_1, list):
+                        print(f"First element type: {type(embedding_1[0])}")
+
+                    # Convert embeddings to float values
+                    embedding_1_float = []
+                    embedding_2_float = []
+
+                    # Convert first embedding to float
+                    for val in embedding_1:
+                        if isinstance(val, str):
+                            embedding_1_float.append(float(val))
+                        else:
+                            embedding_1_float.append(float(val))
+
+                    # Convert second embedding to float
+                    for val in embedding_2:
+                        if isinstance(val, str):
+                            embedding_2_float.append(float(val))
+                        else:
+                            embedding_2_float.append(float(val))
+
+                    # Simple dot product similarity with type checking
+                    def dot_product(v1, v2):
+                        if len(v1) != len(v2):
+                            print(f"Warning: vectors have different lengths: {len(v1)} vs {len(v2)}")
+                            # Use the shorter length
+                            min_len = min(len(v1), len(v2))
+                            return sum(float(v1[i]) * float(v2[i]) for i in range(min_len))
+                        return sum(float(v1[i]) * float(v2[i]) for i in range(len(v1)))
+
+                    # Simple magnitude calculation with type checking
+                    def magnitude(v):
+                        return sum(float(x) * float(x) for x in v) ** 0.5
+
+                    # Simple cosine similarity
+                    dot_prod = dot_product(embedding_1_float, embedding_2_float)
+                    mag1 = magnitude(embedding_1_float)
+                    mag2 = magnitude(embedding_2_float)
+
+                    print(f"Dot product: {dot_prod}, Magnitude 1: {mag1}, Magnitude 2: {mag2}")
+
+                    if mag1 > 0 and mag2 > 0:
+                        similarity_score = dot_prod / (mag1 * mag2)
+                    else:
+                        similarity_score = 0.0
+
+                except Exception as e:
+                    print(f"Error in fallback similarity calculation: {e}")
+                    # Default to a neutral similarity score
+                    similarity_score = 0.5
+            print(f"Embedding similarity score: {similarity_score}")
+
+        except Exception as e:
+            print(f"Error getting document data: {e}")
+            raise
+
+        # Use Agno agent to perform detailed comparison
+        comparison_agent = Agent(
+            model=AzureOpenAI(
+                id=azure_openai_completion_model,
+                api_key=azure_openai_api_key,
+                azure_endpoint=azure_openai_endpoint,
+                api_version=azure_openai_api_version
+            ),
+            name="Document Comparison Agent",
+            description="Compares two documents and analyzes their similarities and differences.",
+            instructions=[
+                "You are a document comparison agent that analyzes the similarities and differences between two documents.",
+                "Identify key similarities and differences in content, structure, and topics.",
+                "Provide a detailed comparison that highlights important aspects of both documents."
+            ],
+            markdown=True
+        )
+
+        # Prepare comparison prompt
+        comparison_prompt = f"""
+        Compare the following two documents and analyze their similarities and differences.
+
+        DOCUMENT 1: {file_name_1}
+        Summary: {summary_1}
+        Topics: {', '.join(topics_1.keys())}
+
+        DOCUMENT 2: {file_name_2}
+        Summary: {summary_2}
+        Topics: {', '.join(topics_2.keys())}
+
+        Provide your analysis in the following JSON format:
+        ```json
+        {{
+            "summary": "A concise summary of the comparison between the two documents",
+            "similarities": {{
+                "overall_similarity": 0.75,
+                "content_similarity": 0.8,
+                "structure_similarity": 0.7,
+                "topic_similarity": 0.9
+            }},
+            "differences": {{
+                "unique_to_first": ["Point 1", "Point 2"],
+                "unique_to_second": ["Point 1", "Point 2"],
+                "contradictions": ["Contradiction 1", "Contradiction 2"]
+            }},
+            "common_topics": ["Topic 1", "Topic 2"],
+            "sections": [
+                {{
+                    "title": "Key Similarities",
+                    "content": "Detailed analysis of the key similarities between the documents"
+                }},
+                {{
+                    "title": "Notable Differences",
+                    "content": "Detailed analysis of the notable differences between the documents"
+                }},
+                {{
+                    "title": "Content Analysis",
+                    "content": "Analysis of the content of both documents"
+                }},
+                {{
+                    "title": "Structure Comparison",
+                    "content": "Comparison of the structure of both documents"
+                }}
+            ]
+        }}
+        ```
+
+        Use the embedding similarity score of {similarity_score} as a reference, but provide your own detailed analysis.
+        """
+
+        # Get comparison analysis
+        response = comparison_agent.run(comparison_prompt)
+
+        try:
+            # Extract JSON from the response
+            content = response.content
+
+            # Print debug info
+            print(f"Response content type: {type(content)}")
+            print(f"Response content length: {len(content) if content else 0}")
+
+            # Find JSON content between ```json and ``` if present
+            if "```json" in content and "```" in content.split("```json", 1)[1]:
+                json_str = content.split("```json", 1)[1].split("```", 1)[0].strip()
+                print("Extracted JSON from ```json``` block")
+            elif "```" in content and "```" in content.split("```", 1)[1]:
+                json_str = content.split("```", 1)[1].split("```", 1)[0].strip()
+                print("Extracted JSON from ``` block")
+            else:
+                json_str = content
+                print("Using full content as JSON")
+
+            # Print the JSON string for debugging
+            print(f"JSON string length: {len(json_str) if json_str else 0}")
+            if json_str and len(json_str) < 500:  # Only print if not too long
+                print(f"JSON string: {json_str}")
+
+            try:
+                comparison_data = json.loads(json_str)
+                print("Successfully parsed JSON data")
+            except json.JSONDecodeError as json_err:
+                print(f"JSON parsing error: {json_err}")
+                # Create a basic structure if JSON parsing fails
+                comparison_data = {
+                    "summary": f"Comparison between {file_name_1} and {file_name_2}. (JSON parsing failed)",
+                    "similarities": {
+                        "overall_similarity": similarity_score,
+                        "content_similarity": similarity_score,
+                        "structure_similarity": similarity_score,
+                        "topic_similarity": similarity_score
+                    },
+                    "differences": {
+                        "unique_to_first": [],
+                        "unique_to_second": [],
+                        "contradictions": []
+                    },
+                    "common_topics": [],
+                    "sections": [
+                        {
+                            "title": "Similarity Analysis",
+                            "content": f"The documents have a similarity score of {similarity_score:.2f} based on their content embeddings."
+                        },
+                        {
+                            "title": "Processing Note",
+                            "content": "Detailed analysis could not be generated due to a processing error."
+                        }
+                    ]
+                }
+
+            # Create comparison result with proper error handling for each field
+            result = DocumentComparisonResult(
+                success=True,
+                file_id_1=file_id_1,
+                file_id_2=file_id_2,
+                file_name_1=file_name_1,
+                file_name_2=file_name_2,
+                summary=comparison_data.get("summary", f"Comparison between {file_name_1} and {file_name_2}"),
+                similarities=DocumentSimilarity(
+                    overall_similarity=float(comparison_data.get("similarities", {}).get("overall_similarity", similarity_score)),
+                    content_similarity=float(comparison_data.get("similarities", {}).get("content_similarity", similarity_score)),
+                    structure_similarity=float(comparison_data.get("similarities", {}).get("structure_similarity", similarity_score)),
+                    topic_similarity=float(comparison_data.get("similarities", {}).get("topic_similarity", similarity_score))
+                ),
+                differences=DocumentDifference(
+                    unique_to_first=comparison_data.get("differences", {}).get("unique_to_first", []),
+                    unique_to_second=comparison_data.get("differences", {}).get("unique_to_second", []),
+                    contradictions=comparison_data.get("differences", {}).get("contradictions", [])
+                ),
+                common_topics=comparison_data.get("common_topics", []),
+                sections=[
+                    ComparisonSection(
+                        title=str(section.get("title", "")),
+                        content=str(section.get("content", ""))
+                    )
+                    for section in comparison_data.get("sections", [])
+                ]
+            )
+
+            return result
+
+        except Exception as e:
+            print(f"Error parsing comparison analysis: {e}")
+
+            # Fallback to a simpler comparison result
+            common_topics = []
+            try:
+                # Try to get common topics, but handle potential errors
+                common_topics = list(set(topics_1.keys()).intersection(set(topics_2.keys())))
+            except Exception as topic_err:
+                print(f"Error getting common topics: {topic_err}")
+
+            # Create a basic fallback result
+            return DocumentComparisonResult(
+                success=True,
+                file_id_1=file_id_1,
+                file_id_2=file_id_2,
+                file_name_1=file_name_1,
+                file_name_2=file_name_2,
+                summary=f"Comparison between {file_name_1} and {file_name_2}",
+                similarities=DocumentSimilarity(
+                    overall_similarity=float(similarity_score),
+                    content_similarity=float(similarity_score),
+                    structure_similarity=float(similarity_score),
+                    topic_similarity=float(similarity_score)
+                ),
+                differences=DocumentDifference(
+                    unique_to_first=[],
+                    unique_to_second=[],
+                    contradictions=[]
+                ),
+                common_topics=common_topics,
+                sections=[
+                    ComparisonSection(
+                        title="Similarity Analysis",
+                        content=f"The documents have a similarity score of {similarity_score:.2f} based on their content embeddings."
+                    ),
+                    ComparisonSection(
+                        title="Basic Comparison",
+                        content=f"This is a basic comparison between {file_name_1} and {file_name_2}. A detailed analysis could not be generated."
+                    )
+                ]
+            )
+
+    except Exception as e:
+        print(f"Error in compare_documents: {e}")
+
+        # Ensure we have valid file names
+        safe_file_name_1 = file_name_1 or "Document 1"
+        safe_file_name_2 = file_name_2 or "Document 2"
+
+        # Return a valid result even in case of error
+        return DocumentComparisonResult(
+            success=False,
+            file_id_1=file_id_1,
+            file_id_2=file_id_2,
+            file_name_1=safe_file_name_1,
+            file_name_2=safe_file_name_2,
+            summary=f"Comparison between {safe_file_name_1} and {safe_file_name_2} could not be completed.",
+            similarities=DocumentSimilarity(
+                overall_similarity=0.0,
+                content_similarity=0.0,
+                structure_similarity=0.0,
+                topic_similarity=0.0
+            ),
+            differences=DocumentDifference(
+                unique_to_first=[],
+                unique_to_second=[],
+                contradictions=[]
+            ),
+            common_topics=[],
+            sections=[
+                ComparisonSection(
+                    title="Error Information",
+                    content=f"The document comparison failed with the following error: {str(e)}"
+                ),
+                ComparisonSection(
+                    title="Troubleshooting",
+                    content="Please try again with different documents or contact support if the issue persists."
+                )
+            ],
+            error=f"Comparison failed: {str(e)}"
+        )
+
+
+async def get_templates(category: Optional[str] = None, user_id: Optional[str] = None) -> List[DocumentTemplate]:
+    """Get document templates."""
+    try:
+        print(f"Getting templates for category: {category}, user_id: {user_id}")
+
+        # Query templates from the database
+        query = supabase_client.table("document_templates").select("*")
+
+        # Filter by category if provided
+        if category:
+            query = query.eq("category", category)
+
+        # Filter by user_id or public templates
+        if user_id:
+            query = query.or_(f"created_by.eq.{user_id},is_public.eq.true")
+        else:
+            query = query.eq("is_public", True)
+
+        # Execute the query
+        response = query.execute()
+
+        if not response.data:
+            print("No templates found")
+            return []
+
+        # Convert to DocumentTemplate objects
+        templates = []
+        for item in response.data:
+            try:
+                # Parse fields from JSON string if needed
+                fields = item.get("fields", [])
+                if isinstance(fields, str):
+                    fields = json.loads(fields)
+
+                # Parse tags from JSON string if needed
+                tags = item.get("tags", [])
+                if isinstance(tags, str):
+                    tags = json.loads(tags)
+
+                template = DocumentTemplate(
+                    id=item.get("id"),
+                    name=item.get("name"),
+                    description=item.get("description"),
+                    category=item.get("category"),
+                    format=item.get("format", "docx"),
+                    content=item.get("content", ""),
+                    fields=fields,
+                    created_by=item.get("created_by"),
+                    created_at=item.get("created_at"),
+                    updated_at=item.get("updated_at"),
+                    is_public=item.get("is_public", False),
+                    tags=tags
+                )
+                templates.append(template)
+            except Exception as e:
+                print(f"Error parsing template: {e}")
+                continue
+
+        return templates
+
+    except Exception as e:
+        print(f"Error in get_templates: {e}")
+        return []
+
+
+async def get_template_by_id(template_id: str) -> Optional[DocumentTemplate]:
+    """Get a document template by ID."""
+    try:
+        print(f"Getting template with ID: {template_id}")
+
+        # Query the template from the database
+        response = supabase_client.table("document_templates").select("*").eq("id", template_id).execute()
+
+        if not response.data:
+            print(f"Template with ID {template_id} not found")
+            return None
+
+        item = response.data[0]
+
+        # Parse fields from JSON string if needed
+        fields = item.get("fields", [])
+        if isinstance(fields, str):
+            fields = json.loads(fields)
+
+        # Parse tags from JSON string if needed
+        tags = item.get("tags", [])
+        if isinstance(tags, str):
+            tags = json.loads(tags)
+
+        template = DocumentTemplate(
+            id=item.get("id"),
+            name=item.get("name"),
+            description=item.get("description"),
+            category=item.get("category"),
+            format=item.get("format", "docx"),
+            content=item.get("content", ""),
+            fields=fields,
+            created_by=item.get("created_by"),
+            created_at=item.get("created_at"),
+            updated_at=item.get("updated_at"),
+            is_public=item.get("is_public", False),
+            tags=tags
+        )
+
+        return template
+
+    except Exception as e:
+        print(f"Error in get_template_by_id: {e}")
+        return None
+
+
+async def create_template(template: DocumentTemplate, user_id: str) -> Optional[DocumentTemplate]:
+    """Create a new document template."""
+    try:
+        print(f"Creating template: {template.name}")
+
+        # Set created_by and timestamps
+        template.created_by = user_id
+        template.created_at = datetime.now()
+        template.updated_at = datetime.now()
+
+        # Convert to dict for database insertion
+        template_dict = template.dict(exclude={"id"})
+
+        # Convert fields and tags to JSON strings if needed
+        if isinstance(template_dict["fields"], list):
+            template_dict["fields"] = json.dumps([field.dict() for field in template.fields])
+
+        if isinstance(template_dict["tags"], list):
+            template_dict["tags"] = json.dumps(template_dict["tags"])
+
+        # Insert into database
+        response = supabase_client.table("document_templates").insert(template_dict).execute()
+
+        if not response.data:
+            print("Failed to create template")
+            return None
+
+        # Get the created template with ID
+        created_template = response.data[0]
+
+        # Parse fields from JSON string if needed
+        fields = created_template.get("fields", [])
+        if isinstance(fields, str):
+            fields = json.loads(fields)
+
+        # Parse tags from JSON string if needed
+        tags = created_template.get("tags", [])
+        if isinstance(tags, str):
+            tags = json.loads(tags)
+
+        return DocumentTemplate(
+            id=created_template.get("id"),
+            name=created_template.get("name"),
+            description=created_template.get("description"),
+            category=created_template.get("category"),
+            format=created_template.get("format", "docx"),
+            content=created_template.get("content", ""),
+            fields=fields,
+            created_by=created_template.get("created_by"),
+            created_at=created_template.get("created_at"),
+            updated_at=created_template.get("updated_at"),
+            is_public=created_template.get("is_public", False),
+            tags=tags
+        )
+
+    except Exception as e:
+        print(f"Error in create_template: {e}")
+        return None
+
+
+async def update_template(template_id: str, template: DocumentTemplate, user_id: str) -> Optional[DocumentTemplate]:
+    """Update an existing document template."""
+    try:
+        print(f"Updating template with ID: {template_id}")
+
+        # Check if template exists and user has permission
+        existing_template = await get_template_by_id(template_id)
+        if not existing_template:
+            print(f"Template with ID {template_id} not found")
+            return None
+
+        if existing_template.created_by != user_id and not existing_template.is_public:
+            print(f"User {user_id} does not have permission to update template {template_id}")
+            return None
+
+        # Update timestamps
+        template.updated_at = datetime.now()
+
+        # Convert to dict for database update
+        template_dict = template.dict(exclude={"id", "created_by", "created_at"})
+
+        # Convert fields and tags to JSON strings if needed
+        if isinstance(template_dict["fields"], list):
+            template_dict["fields"] = json.dumps([field.dict() for field in template.fields])
+
+        if isinstance(template_dict["tags"], list):
+            template_dict["tags"] = json.dumps(template_dict["tags"])
+
+        # Update in database
+        response = supabase_client.table("document_templates").update(template_dict).eq("id", template_id).execute()
+
+        if not response.data:
+            print(f"Failed to update template {template_id}")
+            return None
+
+        # Get the updated template
+        updated_template = response.data[0]
+
+        # Parse fields from JSON string if needed
+        fields = updated_template.get("fields", [])
+        if isinstance(fields, str):
+            fields = json.loads(fields)
+
+        # Parse tags from JSON string if needed
+        tags = updated_template.get("tags", [])
+        if isinstance(tags, str):
+            tags = json.loads(tags)
+
+        return DocumentTemplate(
+            id=updated_template.get("id"),
+            name=updated_template.get("name"),
+            description=updated_template.get("description"),
+            category=updated_template.get("category"),
+            format=updated_template.get("format", "docx"),
+            content=updated_template.get("content", ""),
+            fields=fields,
+            created_by=updated_template.get("created_by"),
+            created_at=updated_template.get("created_at"),
+            updated_at=updated_template.get("updated_at"),
+            is_public=updated_template.get("is_public", False),
+            tags=tags
+        )
+
+    except Exception as e:
+        print(f"Error in update_template: {e}")
+        return None
+
+
+async def delete_template(template_id: str, user_id: str) -> bool:
+    """Delete a document template."""
+    try:
+        print(f"Deleting template with ID: {template_id}")
+
+        # Check if template exists and user has permission
+        existing_template = await get_template_by_id(template_id)
+        if not existing_template:
+            print(f"Template with ID {template_id} not found")
+            return False
+
+        if existing_template.created_by != user_id:
+            print(f"User {user_id} does not have permission to delete template {template_id}")
+            return False
+
+        # Delete from database
+        response = supabase_client.table("document_templates").delete().eq("id", template_id).execute()
+
+        if not response.data:
+            print(f"Failed to delete template {template_id}")
+            return False
+
+        return True
+
+    except Exception as e:
+        print(f"Error in delete_template: {e}")
+        return False
+
+
+async def generate_document_content(request: ContentGenerationRequest) -> ContentGenerationResult:
+    """Generate document content using AI."""
+    try:
+        print(f"Generating document content with format: {request.format}")
+
+        # Initialize content generation agent
+        generation_agent = Agent(
+            model=AzureOpenAI(
+                id=azure_openai_completion_model,
+                api_key=azure_openai_api_key,
+                azure_endpoint=azure_openai_endpoint,
+                api_version=azure_openai_api_version
+            ),
+            name="Document Generation Agent",
+            description="Generates document content based on templates and user inputs.",
+            instructions=[
+                "You are a document generation agent that creates professional document content.",
+                "Generate content based on templates and user inputs.",
+                "Ensure the content is well-structured, professional, and follows best practices for the document type."
+            ],
+            markdown=True
+        )
+
+        # If template_id is provided, get the template
+        template = None
+        if request.template_id:
+            template = await get_template_by_id(request.template_id)
+            if not template:
+                return ContentGenerationResult(
+                    success=False,
+                    format=request.format,
+                    error=f"Template with ID {request.template_id} not found"
+                )
+
+        # If template_name is provided but not template_id, try to find the template by name
+        elif request.template_name:
+            templates = await get_templates()
+            for t in templates:
+                if t.name.lower() == request.template_name.lower():
+                    template = t
+                    break
+
+            if not template:
+                return ContentGenerationResult(
+                    success=False,
+                    format=request.format,
+                    error=f"Template with name '{request.template_name}' not found"
+                )
+
+        # Prepare generation prompt
+        if template:
+            # Generate from template
+            prompt = f"""
+            Generate a {template.format} document based on the following template:
+
+            Template Name: {template.name}
+            Template Description: {template.description}
+
+            Template Content:
+            {template.content}
+
+            User Inputs:
+            """
+
+            # Add user inputs for template fields
+            for field in template.fields:
+                field_value = request.fields.get(field.name, field.default or "")
+                prompt += f"\n{field.name}: {field_value}"
+
+            prompt += """
+
+            Please generate the complete document content based on the template and user inputs.
+            Ensure the document is well-structured, professional, and follows best practices.
+            Return ONLY the generated document content without any additional explanations.
+            """
+        else:
+            # Generate from description
+            if not request.description:
+                return ContentGenerationResult(
+                    success=False,
+                    format=request.format,
+                    error="Either template_id, template_name, or description must be provided"
+                )
+
+            prompt = f"""
+            Generate a {request.format} document based on the following description:
+
+            {request.description}
+
+            User Inputs:
+            """
+
+            # Add any user inputs
+            for field_name, field_value in request.fields.items():
+                prompt += f"\n{field_name}: {field_value}"
+
+            prompt += """
+
+            Please generate the complete document content based on the description and user inputs.
+            Ensure the document is well-structured, professional, and follows best practices.
+            Return ONLY the generated document content without any additional explanations.
+            """
+
+        # Generate content
+        response = generation_agent.run(prompt)
+
+        # Extract content from response
+        content = response.content
+
+        # Remove markdown code blocks if present
+        if "```" in content:
+            # Extract content between first and last code block markers
+            content = content.split("```", 1)[1]
+            if "```" in content:
+                content = content.split("```", 1)[0]
+
+            # Remove language identifier if present (e.g., ```markdown)
+            if content.startswith(request.format) or content.startswith("markdown") or content.startswith("md"):
+                content = content.split("\n", 1)[1]
+
+        return ContentGenerationResult(
+            success=True,
+            content=content,
+            format=request.format
+        )
+
+    except Exception as e:
+        print(f"Error in generate_document_content: {e}")
+        return ContentGenerationResult(
+            success=False,
+            format=request.format,
             error=str(e)
         )

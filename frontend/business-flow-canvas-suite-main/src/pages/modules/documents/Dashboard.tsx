@@ -26,7 +26,8 @@ import {
   FileCog,
   FileCheck,
   FileSearch,
-  Loader2
+  Loader2,
+  Diff
 } from "lucide-react";
 
 const DocumentsDashboard = () => {
@@ -261,6 +262,17 @@ const DocumentsDashboard = () => {
         : documentCounts.processed > 0
           ? `${documentCounts.processed} processed document${documentCounts.processed !== 1 ? 's' : ''}`
           : "AI processing available",
+    },
+    {
+      title: "Document Comparison",
+      description: "Compare documents semantically",
+      icon: <Diff className="h-8 w-8 text-indigo-500" />,
+      href: "/dashboard/documents/compare",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : documentCounts.processed > 1
+          ? "Compare processed documents"
+          : "Process documents to compare",
     },
     {
       title: "Templates",
