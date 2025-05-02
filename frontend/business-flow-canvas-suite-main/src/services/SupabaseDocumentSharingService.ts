@@ -1,9 +1,9 @@
 import { supabase } from '@/config/supabaseClient';
 import { toast } from 'sonner';
-import { 
-  DocumentShare, 
-  DocumentShareWithUser, 
-  DocumentVersion, 
+import {
+  DocumentShare,
+  DocumentShareWithUser,
+  DocumentVersion,
   DocumentVersionWithUser,
   ShareDocumentRequest,
   UpdateSharePermissionRequest,
@@ -23,7 +23,7 @@ export class SupabaseDocumentSharingService {
     try {
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         throw new Error('User not authenticated');
       }
@@ -60,32 +60,59 @@ export class SupabaseDocumentSharingService {
   async getDocumentShares(fileId: string): Promise<DocumentShareWithUser[]> {
     try {
       // Get shares with user information
-      const { data, error } = await supabase
+      // Get shares without the join first
+      const { data: sharesData, error: sharesError } = await supabase
         .from('document_shares')
-        .select(`
-          *,
-          user:shared_with_id (
-            id,
-            email,
-            user_metadata
-          )
-        `)
+        .select('*')
         .eq('file_id', fileId);
 
-      if (error) {
-        throw error;
+      if (sharesError) {
+        throw sharesError;
       }
 
-      // Transform the data to match the DocumentShareWithUser interface
-      return data.map(share => ({
-        ...share,
-        user: {
-          id: share.user.id,
-          email: share.user.email,
-          name: share.user.user_metadata?.name || share.user.email,
-          avatar_url: share.user.user_metadata?.avatar_url
-        }
-      }));
+      // Then get user data for each share
+      const shares = await Promise.all(
+        sharesData.map(async (share) => {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, email, user_metadata')
+            .eq('id', share.shared_with_id)
+            .single();
+
+          if (userError) {
+            console.warn(`Could not fetch user data for ID ${share.shared_with_id}:`, userError);
+            return {
+              ...share,
+              user: {
+                id: share.shared_with_id,
+                email: 'Unknown user',
+                name: 'Unknown user',
+                avatar_url: undefined
+              }
+            };
+          }
+
+          // Extract user's full name from metadata
+          const firstName = userData.user_metadata?.first_name || '';
+          const lastName = userData.user_metadata?.last_name || '';
+          const fullName = firstName && lastName
+            ? `${firstName} ${lastName}`
+            : userData.user_metadata?.name || userData.email?.split('@')[0] || 'User';
+
+          return {
+            ...share,
+            user: {
+              id: userData.id,
+              email: userData.email,
+              name: fullName,
+              avatar_url: userData.user_metadata?.avatar_url
+            }
+          };
+        })
+      );
+
+      // Return the shares with user information
+      return shares;
     } catch (error: any) {
       console.error('Error getting document shares:', error);
       toast.error(`Failed to get document shares: ${error.message || 'Unknown error'}`);
@@ -101,7 +128,7 @@ export class SupabaseDocumentSharingService {
     try {
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         throw new Error('User not authenticated');
       }
@@ -204,7 +231,7 @@ export class SupabaseDocumentSharingService {
     try {
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         return false;
       }

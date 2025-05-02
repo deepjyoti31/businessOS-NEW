@@ -6,6 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
+import { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { documentService } from "@/services/documentServiceInstances";
+import { supabaseAIDocumentService } from "@/services/SupabaseAIDocumentService";
+import { FileMetadata } from "@/services/supabaseStorageService";
 import {
   FileText,
   FolderOpen,
@@ -20,10 +25,158 @@ import {
   Share2,
   FileCog,
   FileCheck,
-  FileSearch
+  FileSearch,
+  Loader2
 } from "lucide-react";
 
 const DocumentsDashboard = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [documentCounts, setDocumentCounts] = useState({
+    allFiles: 0,
+    processed: 0,
+    templates: 0,
+    workflows: 0,
+    shared: 0,
+    archived: 0
+  });
+  const [processedDocuments, setProcessedDocuments] = useState<FileMetadata[]>([]);
+  const [storageData, setStorageData] = useState({
+    totalSize: 0,
+    maxSize: 1024 * 1024 * 1024, // 1 GB default
+    usagePercentage: 0,
+    fileTypes: {
+      pdf: { size: 0, count: 0, percentage: 0 },
+      image: { size: 0, count: 0, percentage: 0 },
+      document: { size: 0, count: 0, percentage: 0 },
+      spreadsheet: { size: 0, count: 0, percentage: 0 },
+      other: { size: 0, count: 0, percentage: 0 }
+    }
+  });
+  const { toast } = useToast();
+
+  // Load document counts and processed documents
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+
+        // Get all files
+        const allFiles = await documentService.getAllFiles();
+
+        // Get shared documents
+        const sharedWithMe = await documentService.getSharedWithMe();
+
+        // Count documents by type
+        const counts = {
+          allFiles: allFiles.filter(file => !file.isFolder).length,
+          processed: allFiles.filter(file => !file.isFolder && file.processing_status === 'completed').length,
+          templates: 0, // No real templates yet
+          workflows: 0, // No real workflows yet
+          shared: sharedWithMe.length,
+          archived: allFiles.filter(file => file.isArchived).length
+        };
+
+        // Calculate storage data
+        const files = allFiles.filter(file => !file.isFolder);
+        const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
+        const maxSize = 1024 * 1024 * 1024; // 1 GB (can be adjusted)
+        const usagePercentage = (totalSize / maxSize) * 100;
+
+        // Initialize file type counters
+        const fileTypes = {
+          pdf: { size: 0, count: 0, percentage: 0 },
+          image: { size: 0, count: 0, percentage: 0 },
+          document: { size: 0, count: 0, percentage: 0 },
+          spreadsheet: { size: 0, count: 0, percentage: 0 },
+          other: { size: 0, count: 0, percentage: 0 }
+        };
+
+        // Calculate size by file type
+        files.forEach(file => {
+          const type = file.type?.toLowerCase() || '';
+          const size = file.size || 0;
+
+          if (type.includes('pdf')) {
+            fileTypes.pdf.size += size;
+            fileTypes.pdf.count++;
+          } else if (type.includes('image') || type.includes('jpg') || type.includes('png') || type.includes('jpeg') || type.includes('gif')) {
+            fileTypes.image.size += size;
+            fileTypes.image.count++;
+          } else if (type.includes('doc') || type.includes('txt') || type.includes('rtf')) {
+            fileTypes.document.size += size;
+            fileTypes.document.count++;
+          } else if (type.includes('xls') || type.includes('csv') || type.includes('sheet')) {
+            fileTypes.spreadsheet.size += size;
+            fileTypes.spreadsheet.count++;
+          } else {
+            fileTypes.other.size += size;
+            fileTypes.other.count++;
+          }
+        });
+
+        // Calculate percentages
+        if (totalSize > 0) {
+          Object.keys(fileTypes).forEach(key => {
+            fileTypes[key as keyof typeof fileTypes].percentage =
+              (fileTypes[key as keyof typeof fileTypes].size / totalSize) * 100;
+          });
+        }
+
+        setStorageData({
+          totalSize,
+          maxSize,
+          usagePercentage: Math.min(usagePercentage, 100), // Cap at 100%
+          fileTypes
+        });
+
+        setDocumentCounts(counts);
+
+        // Get processed documents for AI insights - only 2 most recent ones
+        const processedDocs = allFiles
+          .filter(file => !file.isFolder && file.processing_status === 'completed')
+          .sort((a, b) => {
+            // Sort by processed_at date (most recent first)
+            const dateA = a.processed_at ? new Date(a.processed_at).getTime() : 0;
+            const dateB = b.processed_at ? new Date(b.processed_at).getTime() : 0;
+            return dateB - dateA;
+          })
+          .slice(0, 2);
+
+        // Fetch additional metadata for each processed document
+        const docsWithMetadata = await Promise.all(
+          processedDocs.map(async (doc) => {
+            try {
+              const metadata = await supabaseAIDocumentService.getDocumentMetadata(doc.id);
+              return {
+                ...doc,
+                summary: metadata?.summary || 'No summary available',
+                entities: metadata?.entities || null,
+                topics: metadata?.topics || null,
+                sentiment: metadata?.sentiment || null
+              };
+            } catch (error) {
+              console.error(`Error fetching metadata for document ${doc.id}:`, error);
+              return doc;
+            }
+          })
+        );
+
+        setProcessedDocuments(docsWithMetadata);
+      } catch (error) {
+        console.error('Error loading document data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load document data',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [toast]);
+
   // Sample document data
   const recentDocuments = [
     {
@@ -94,42 +247,60 @@ const DocumentsDashboard = () => {
       description: "Browse and manage all documents",
       icon: <FolderOpen className="h-8 w-8 text-blue-500" />,
       href: "/dashboard/documents/all-files",
-      stats: "256 documents",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : `${documentCounts.allFiles} document${documentCounts.allFiles !== 1 ? 's' : ''}`,
     },
     {
       title: "AI Document Analysis",
       description: "Extract insights from documents",
       icon: <FileSearch className="h-8 w-8 text-purple-500" />,
       href: "/dashboard/documents/analysis",
-      stats: "AI processing available",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : documentCounts.processed > 0
+          ? `${documentCounts.processed} processed document${documentCounts.processed !== 1 ? 's' : ''}`
+          : "AI processing available",
     },
     {
       title: "Templates",
       description: "Document templates library",
       icon: <FileCheck className="h-8 w-8 text-emerald-500" />,
       href: "/dashboard/documents/templates",
-      stats: "18 templates available",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : documentCounts.templates > 0
+          ? `${documentCounts.templates} template${documentCounts.templates !== 1 ? 's' : ''} available`
+          : "Templates coming soon",
     },
     {
       title: "Workflows",
       description: "Document approval workflows",
       icon: <FileCog className="h-8 w-8 text-amber-500" />,
       href: "/dashboard/documents/workflows",
-      stats: "3 active workflows",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : documentCounts.workflows > 0
+          ? `${documentCounts.workflows} active workflow${documentCounts.workflows !== 1 ? 's' : ''}`
+          : "No active workflows",
     },
     {
       title: "Shared",
       description: "Documents shared with you and by you",
       icon: <Share2 className="h-8 w-8 text-indigo-500" />,
       href: "/dashboard/documents/shared",
-      stats: "12 shared documents",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : `${documentCounts.shared} shared document${documentCounts.shared !== 1 ? 's' : ''}`,
     },
     {
       title: "Archive",
       description: "Long-term document storage",
       icon: <File className="h-8 w-8 text-stone-500" />,
       href: "/dashboard/documents/archive",
-      stats: "187 archived items",
+      stats: isLoading
+        ? <span className="flex items-center"><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Loading...</span>
+        : `${documentCounts.archived} archived item${documentCounts.archived !== 1 ? 's' : ''}`,
     },
   ];
 
@@ -161,88 +332,55 @@ const DocumentsDashboard = () => {
     return typeColors[type] || "bg-gray-100 text-gray-800";
   };
 
+  // Format file size to human-readable format
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold mb-1">Documents</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground mb-6">
           Manage, store, and collaborate on documents
         </p>
+
+        {/* Document modules grid moved to top as requested */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          {documentModules.map((module) => (
+            <Link key={module.href} to={module.href} className="block">
+              <Card className="h-full transition-all hover:shadow-md">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    {module.icon}
+                  </div>
+                  <CardTitle className="mt-2">{module.title}</CardTitle>
+                  <CardDescription>{module.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    {module.stats}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-auto sm:min-w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search documents..."
-            className="pl-10"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button className="flex gap-1.5">
-            <Upload className="h-4 w-4" />
-            <span>Upload</span>
-          </Button>
-          <Button variant="outline" className="flex gap-1.5">
-            <FolderOpen className="h-4 w-4" />
-            <span>New Folder</span>
-          </Button>
-        </div>
-      </div>
+      {/* Search and buttons removed as requested */}
 
-      <Tabs defaultValue="recent" className="space-y-4">
+      <Tabs defaultValue="ai" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="recent">Recent Documents</TabsTrigger>
           <TabsTrigger value="ai">AI Features</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="recent">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recently Modified</CardTitle>
-              <CardDescription>Documents updated in the last 7 days</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentDocuments.map(doc => (
-                  <div key={doc.id} className="flex items-center gap-4 p-3 rounded-md hover:bg-muted/50 transition-colors">
-                    <div className="p-2 bg-muted rounded">
-                      {doc.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium truncate">{doc.name}</p>
-                        <Badge variant="outline" className={`${getDocTypeColor(doc.type)} text-xs`}>{doc.type}</Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                        <Clock className="h-3 w-3" />
-                        <span>Modified {getRelativeTime(doc.modified)}</span>
-                        <span className="opacity-50">•</span>
-                        <div className="flex items-center gap-1">
-                          <Avatar className="h-4 w-4">
-                            <AvatarFallback className="text-[10px]">{doc.modifiedBy.avatar}</AvatarFallback>
-                          </Avatar>
-                          <span>{doc.modifiedBy.name}</span>
-                        </div>
-                        {doc.shared > 0 && (
-                          <>
-                            <span className="opacity-50">•</span>
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              <span>Shared with {doc.shared} {doc.shared === 1 ? 'person' : 'people'}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm">Open</Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="ai">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -259,7 +397,7 @@ const DocumentsDashboard = () => {
                   <div>
                     <h3 className="font-medium">Document Summarization</h3>
                     <p className="text-sm text-muted-foreground mt-1">AI can automatically generate concise summaries from long documents.</p>
-                    <Button variant="link" className="p-0 h-auto mt-1">Try it now</Button>
+                    <Link to="/dashboard/documents/analysis"><Button variant="link" className="p-0 h-auto mt-1">Try it now</Button></Link>
                   </div>
                 </div>
 
@@ -270,7 +408,7 @@ const DocumentsDashboard = () => {
                   <div>
                     <h3 className="font-medium">Content Extraction</h3>
                     <p className="text-sm text-muted-foreground mt-1">Extract specific information like dates, names, and key facts from documents.</p>
-                    <Button variant="link" className="p-0 h-auto mt-1">Try it now</Button>
+                    <Link to="/dashboard/documents/analysis"><Button variant="link" className="p-0 h-auto mt-1">Try it now</Button></Link>
                   </div>
                 </div>
 
@@ -281,7 +419,7 @@ const DocumentsDashboard = () => {
                   <div>
                     <h3 className="font-medium">Document Generation</h3>
                     <p className="text-sm text-muted-foreground mt-1">Create standardized documents from templates using AI assistance.</p>
-                    <Button variant="link" className="p-0 h-auto mt-1">Try it now</Button>
+                    <Link to="/dashboard/documents/analysis"><Button variant="link" className="p-0 h-auto mt-1">Try it now</Button></Link>
                   </div>
                 </div>
               </CardContent>
@@ -293,27 +431,66 @@ const DocumentsDashboard = () => {
                 <CardDescription>AI-generated analysis from your documents</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 border rounded-md">
-                  <h3 className="font-medium text-sm flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-red-500" /> {/* Changed from FilePdf to FileText with red color */}
-                    From: Q1 2025 Financial Report.pdf
-                  </h3>
-                  <p className="text-sm mt-2">Key metrics show a 12% increase in revenue compared to Q4 2024, with operating expenses remaining stable. The AI detected three potential discrepancies in the expense allocations that may require review.</p>
-                  <div className="flex justify-end mt-2">
-                    <Button variant="outline" size="sm">View Full Analysis</Button>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                </div>
+                ) : processedDocuments.length > 0 ? (
+                  processedDocuments.map((doc) => (
+                    <div key={doc.id} className="p-4 border rounded-md">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-medium text-sm flex items-center gap-2">
+                          <FileText className={`h-4 w-4 ${doc.type?.toLowerCase().includes('pdf') ? 'text-red-500' : 'text-blue-500'}`} />
+                          {doc.name}
+                        </h3>
+                        <Badge variant={doc.sentiment?.overall === 'positive' ? 'success' : doc.sentiment?.overall === 'negative' ? 'destructive' : 'secondary'}>
+                          {doc.sentiment?.overall ? doc.sentiment.overall.charAt(0).toUpperCase() + doc.sentiment.overall.slice(1) : 'Neutral'}
+                        </Badge>
+                      </div>
 
-                <div className="p-4 border rounded-md">
-                  <h3 className="font-medium text-sm flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-blue-500" />
-                    From: Product Roadmap 2025.docx
-                  </h3>
-                  <p className="text-sm mt-2">The AI has created a structured timeline from your roadmap document, identifying 8 key milestones and 3 potential resource conflicts in Q3 and Q4.</p>
-                  <div className="flex justify-end mt-2">
-                    <Button variant="outline" size="sm">View Timeline</Button>
+                      <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                        <Clock className="h-3 w-3" />
+                        <span>Processed: {doc.processed_at ? new Date(doc.processed_at).toLocaleString() : 'Unknown'}</span>
+                      </div>
+
+                      <p className="text-sm mt-2">
+                        {doc.summary?.substring(0, 150).replace(/^\*\*Summary:\*\*\s*/i, '')}
+                        {doc.summary && doc.summary.length > 150 ? '...' : ''}
+                      </p>
+
+                      {doc.entities && (
+                        <div className="mt-2">
+                          <div className="text-xs font-medium mb-1">Key Entities:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {doc.entities.key_terms?.slice(0, 3).map((term, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">{term}</Badge>
+                            ))}
+                            {doc.entities.organizations?.slice(0, 2).map((org, i) => (
+                              <Badge key={i} variant="outline" className="bg-blue-50 text-xs">{org}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end mt-3">
+                        <Link to={`/dashboard/documents/file/${doc.id}`}>
+                          <Button variant="outline" size="sm">View Document</Button>
+                        </Link>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 border rounded-md">
+                    <p className="text-sm text-center text-muted-foreground">
+                      No processed documents found. Process documents in the AI Document Analysis page to see insights here.
+                    </p>
+                    <div className="flex justify-center mt-4">
+                      <Link to="/dashboard/documents/analysis">
+                        <Button variant="outline" size="sm">Go to AI Document Analysis</Button>
+                      </Link>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -326,100 +503,96 @@ const DocumentsDashboard = () => {
               <CardDescription>Document storage usage and organization</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">Storage Usage</span>
-                  <span>8.2 GB / 15 GB (54.7%)</span>
+              {isLoading ? (
+                <div className="flex justify-center items-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-                <Progress value={54.7} className="h-2" />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 border rounded-md">
-                  <h3 className="font-medium mb-2">Storage by File Type</h3>
+              ) : (
+                <>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="flex items-center gap-1">
-                        <FileText className="h-4 w-4 text-red-500" /> {/* Changed from FilePdf to FileText with red color */}
-                        PDF Documents
-                      </span>
-                      <span className="font-medium">3.4 GB</span>
+                      <span className="font-medium">Storage Usage</span>
+                      <span>{formatFileSize(storageData.totalSize)} / {formatFileSize(storageData.maxSize)} ({storageData.usagePercentage.toFixed(1)}%)</span>
                     </div>
-                    <Progress value={41} className="h-1.5 bg-red-100" />
-
-                    <div className="flex justify-between text-sm">
-                      <span className="flex items-center gap-1">
-                        <FileImage className="h-4 w-4 text-purple-500" />
-                        Images
-                      </span>
-                      <span className="font-medium">2.2 GB</span>
-                    </div>
-                    <Progress value={27} className="h-1.5 bg-purple-100" />
-
-                    <div className="flex justify-between text-sm">
-                      <span className="flex items-center gap-1">
-                        <FileText className="h-4 w-4 text-blue-500" />
-                        Documents
-                      </span>
-                      <span className="font-medium">1.5 GB</span>
-                    </div>
-                    <Progress value={18} className="h-1.5 bg-blue-100" />
-
-                    <div className="flex justify-between text-sm">
-                      <span className="flex items-center gap-1">
-                        <FileSpreadsheet className="h-4 w-4 text-green-500" />
-                        Spreadsheets
-                      </span>
-                      <span className="font-medium">0.8 GB</span>
-                    </div>
-                    <Progress value={10} className="h-1.5 bg-green-100" />
-
-                    <div className="flex justify-between text-sm">
-                      <span className="flex items-center gap-1">
-                        <File className="h-4 w-4 text-gray-500" />
-                        Other Files
-                      </span>
-                      <span className="font-medium">0.3 GB</span>
-                    </div>
-                    <Progress value={4} className="h-1.5 bg-gray-100" />
+                    <Progress value={storageData.usagePercentage} className="h-2" />
                   </div>
-                </div>
 
-                <div className="p-4 border rounded-md">
-                  <h3 className="font-medium mb-2">AI Storage Recommendations</h3>
-                  <div className="space-y-3 text-sm">
-                    <p>• 1.2 GB of duplicate files detected that can be safely removed</p>
-                    <p>• 2.3 GB of files haven't been accessed in over 12 months</p>
-                    <p>• 845 MB of large media files could be compressed</p>
-                    <Button size="sm" className="mt-2">Optimize Storage</Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 border rounded-md">
+                      <h3 className="font-medium mb-2">Storage by File Type</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <FileText className="h-4 w-4 text-red-500" />
+                            PDF Documents ({storageData.fileTypes.pdf.count})
+                          </span>
+                          <span className="font-medium">{formatFileSize(storageData.fileTypes.pdf.size)}</span>
+                        </div>
+                        <Progress value={storageData.fileTypes.pdf.percentage} className="h-1.5 bg-red-100" />
+
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <FileImage className="h-4 w-4 text-purple-500" />
+                            Images ({storageData.fileTypes.image.count})
+                          </span>
+                          <span className="font-medium">{formatFileSize(storageData.fileTypes.image.size)}</span>
+                        </div>
+                        <Progress value={storageData.fileTypes.image.percentage} className="h-1.5 bg-purple-100" />
+
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <FileText className="h-4 w-4 text-blue-500" />
+                            Documents ({storageData.fileTypes.document.count})
+                          </span>
+                          <span className="font-medium">{formatFileSize(storageData.fileTypes.document.size)}</span>
+                        </div>
+                        <Progress value={storageData.fileTypes.document.percentage} className="h-1.5 bg-blue-100" />
+
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <FileSpreadsheet className="h-4 w-4 text-green-500" />
+                            Spreadsheets ({storageData.fileTypes.spreadsheet.count})
+                          </span>
+                          <span className="font-medium">{formatFileSize(storageData.fileTypes.spreadsheet.size)}</span>
+                        </div>
+                        <Progress value={storageData.fileTypes.spreadsheet.percentage} className="h-1.5 bg-green-100" />
+
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <File className="h-4 w-4 text-gray-500" />
+                            Other Files ({storageData.fileTypes.other.count})
+                          </span>
+                          <span className="font-medium">{formatFileSize(storageData.fileTypes.other.size)}</span>
+                        </div>
+                        <Progress value={storageData.fileTypes.other.percentage} className="h-1.5 bg-gray-100" />
+                      </div>
+                    </div>
+
+                    <div className="p-4 border rounded-md">
+                      <h3 className="font-medium mb-2">Storage Statistics</h3>
+                      <div className="space-y-3 text-sm">
+                        <p>• Total files: {documentCounts.allFiles}</p>
+                        <p>• Average file size: {documentCounts.allFiles > 0 ? formatFileSize(storageData.totalSize / documentCounts.allFiles) : '0 Bytes'}</p>
+                        <p>• Largest file type: {
+                          Object.entries(storageData.fileTypes)
+                            .sort((a, b) => b[1].size - a[1].size)[0]?.[0].charAt(0).toUpperCase() +
+                            Object.entries(storageData.fileTypes)
+                            .sort((a, b) => b[1].size - a[1].size)[0]?.[0].slice(1) || 'None'
+                        }</p>
+                        <Link to="/dashboard/documents/all-files">
+                          <Button size="sm" className="mt-2">Manage Files</Button>
+                        </Link>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {documentModules.map((module) => (
-          <Link key={module.href} to={module.href} className="block">
-            <Card className="h-full transition-all hover:shadow-md">
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  {module.icon}
-                </div>
-                <CardTitle className="mt-2">{module.title}</CardTitle>
-                <CardDescription>{module.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm font-medium text-muted-foreground">
-                  {module.stats}
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {/* Document modules grid moved to top of page */}
 
       <Card>
         <CardHeader>

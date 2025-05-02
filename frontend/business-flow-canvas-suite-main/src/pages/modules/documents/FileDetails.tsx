@@ -49,7 +49,7 @@ const FileDetails = () => {
 
         if (!fileData) {
           toast.error("File not found");
-          navigate("/modules/documents/all-files");
+          navigate("/dashboard/documents/all-files");
           return;
         }
 
@@ -129,7 +129,7 @@ const FileDetails = () => {
 
       if (success) {
         toast.success("File deleted successfully");
-        navigate("/modules/documents/all-files");
+        navigate("/dashboard/documents/all-files");
       } else {
         toast.error("Failed to delete file");
       }
@@ -181,7 +181,7 @@ const FileDetails = () => {
         <p>File not found</p>
         <Button
           variant="link"
-          onClick={() => navigate("/modules/documents/all-files")}
+          onClick={() => navigate("/dashboard/documents/all-files")}
           className="mt-4"
         >
           Back to All Files
@@ -195,7 +195,7 @@ const FileDetails = () => {
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
-          onClick={() => navigate("/modules/documents/all-files")}
+          onClick={() => navigate("/dashboard/documents/all-files")}
           className="gap-1"
         >
           <ArrowLeft className="h-4 w-4" />

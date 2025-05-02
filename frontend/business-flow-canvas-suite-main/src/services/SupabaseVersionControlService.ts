@@ -60,34 +60,60 @@ export class SupabaseVersionControlService {
    */
   async getDocumentVersions(fileId: string): Promise<DocumentVersionWithUser[]> {
     try {
-      // Get versions with user information
-      const { data, error } = await supabase
+      // Get versions without the join first
+      const { data: versionsData, error: versionsError } = await supabase
         .from('document_versions')
-        .select(`
-          *,
-          user:created_by (
-            id,
-            email,
-            user_metadata
-          )
-        `)
+        .select('*')
         .eq('file_id', fileId)
         .order('version_number', { ascending: false });
 
-      if (error) {
-        throw error;
+      if (versionsError) {
+        throw versionsError;
       }
 
-      // Transform the data to match the DocumentVersionWithUser interface
-      return data.map(version => ({
-        ...version,
-        user: {
-          id: version.user.id,
-          email: version.user.email,
-          name: version.user.user_metadata?.name || version.user.email,
-          avatar_url: version.user.user_metadata?.avatar_url
-        }
-      }));
+      // Then get user data for each version
+      const versions = await Promise.all(
+        versionsData.map(async (version) => {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, email, user_metadata')
+            .eq('id', version.created_by)
+            .single();
+
+          if (userError) {
+            console.warn(`Could not fetch user data for ID ${version.created_by}:`, userError);
+            return {
+              ...version,
+              user: {
+                id: version.created_by,
+                email: 'Unknown user',
+                name: 'Unknown user',
+                avatar_url: undefined
+              }
+            };
+          }
+
+          // Extract user's full name from metadata
+          const firstName = userData.user_metadata?.first_name || '';
+          const lastName = userData.user_metadata?.last_name || '';
+          const fullName = firstName && lastName
+            ? `${firstName} ${lastName}`
+            : userData.user_metadata?.name || userData.email?.split('@')[0] || 'User';
+
+          return {
+            ...version,
+            user: {
+              id: userData.id,
+              email: userData.email,
+              name: fullName,
+              avatar_url: userData.user_metadata?.avatar_url
+            }
+          };
+        })
+      );
+
+      // Return the versions with user information
+      return versions;
     } catch (error: any) {
       console.error('Error getting document versions:', error);
       toast.error(`Failed to get document versions: ${error.message || 'Unknown error'}`);
@@ -102,32 +128,52 @@ export class SupabaseVersionControlService {
    */
   async getDocumentVersion(versionId: string): Promise<DocumentVersionWithUser | null> {
     try {
-      // Get the version with user information
-      const { data, error } = await supabase
+      // Get the version without the join
+      const { data: versionData, error: versionError } = await supabase
         .from('document_versions')
-        .select(`
-          *,
-          user:created_by (
-            id,
-            email,
-            user_metadata
-          )
-        `)
+        .select('*')
         .eq('id', versionId)
         .single();
 
-      if (error) {
-        throw error;
+      if (versionError) {
+        throw versionError;
       }
 
-      // Transform the data to match the DocumentVersionWithUser interface
+      // Get user data
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, email, user_metadata')
+        .eq('id', versionData.created_by)
+        .single();
+
+      if (userError) {
+        console.warn(`Could not fetch user data for ID ${versionData.created_by}:`, userError);
+        return {
+          ...versionData,
+          user: {
+            id: versionData.created_by,
+            email: 'Unknown user',
+            name: 'Unknown user',
+            avatar_url: undefined
+          }
+        };
+      }
+
+      // Extract user's full name from metadata
+      const firstName = userData.user_metadata?.first_name || '';
+      const lastName = userData.user_metadata?.last_name || '';
+      const fullName = firstName && lastName
+        ? `${firstName} ${lastName}`
+        : userData.user_metadata?.name || userData.email?.split('@')[0] || 'User';
+
+      // Return the version with user information
       return {
-        ...data,
+        ...versionData,
         user: {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.user_metadata?.name || data.user.email,
-          avatar_url: data.user.user_metadata?.avatar_url
+          id: userData.id,
+          email: userData.email,
+          name: fullName,
+          avatar_url: userData.user_metadata?.avatar_url
         }
       };
     } catch (error: any) {
