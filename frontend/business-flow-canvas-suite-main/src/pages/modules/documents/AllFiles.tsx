@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
 import {
   FileText,
   FolderOpen,
@@ -16,12 +17,13 @@ import {
   ChevronLeft,
   Loader2
 } from "lucide-react";
-import { supabaseDocumentService } from "@/services/SupabaseDocumentService";
+import { documentService } from "@/services/documentServiceInstances";
 import { FileMetadata } from "@/services/supabaseStorageService";
 import UploadFileDialog from "@/components/documents/UploadFileDialog";
 import NewFolderDialog from "@/components/documents/NewFolderDialog";
 
 const AllFiles = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [currentFolder, setCurrentFolder] = useState("");
@@ -49,7 +51,7 @@ const AllFiles = () => {
       }, 15000); // 15 seconds timeout for the entire initialization process
 
       try {
-        await supabaseDocumentService.initialize();
+        await documentService.initialize();
         clearTimeout(initTimeout); // Clear the timeout if initialization succeeds
         loadFilesAndFolders();
       } catch (error) {
@@ -111,7 +113,7 @@ const AllFiles = () => {
     }, 10000); // 10 seconds timeout for loading
 
     try {
-      const items = await supabaseDocumentService.listFilesAndFolders(currentFolder);
+      const items = await documentService.listFilesAndFolders(currentFolder);
       clearTimeout(loadTimeout); // Clear the timeout if loading succeeds
 
       // Separate files and folders
@@ -425,7 +427,7 @@ const AllFiles = () => {
 
     try {
       for (const file of files) {
-        await supabaseDocumentService.uploadFile(file, targetFolder);
+        await documentService.uploadFile(file, targetFolder);
       }
       clearTimeout(uploadTimeout); // Clear the timeout if upload succeeds
 
@@ -511,7 +513,7 @@ const AllFiles = () => {
     }, 10000); // 10 seconds timeout for folder creation
 
     try {
-      await supabaseDocumentService.createFolder(folderName, parentFolder);
+      await documentService.createFolder(folderName, parentFolder);
       clearTimeout(folderTimeout); // Clear the timeout if creation succeeds
 
       // Reload files after folder creation
@@ -606,6 +608,15 @@ const AllFiles = () => {
   const filteredFolders = folders.filter((folder) =>
     folder.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Handle file click to navigate to file details
+  const handleFileClick = (file: FileMetadata) => {
+    if (file.isFolder) {
+      navigateToFolder(file.path);
+    } else {
+      navigate(`/dashboard/documents/file/${file.id}`);
+    }
+  };
 
   // File type icon mapping
   const getFileIcon = (type: string) => {
@@ -811,7 +822,11 @@ const AllFiles = () => {
                 <div className="divide-y">
                   {filteredDocuments.length > 0 ? (
                     filteredDocuments.map((document) => (
-                      <div key={document.id} className="p-4 hover:bg-muted/50 flex items-center gap-4">
+                      <div
+                        key={document.id}
+                        className="p-4 hover:bg-muted/50 flex items-center gap-4 cursor-pointer"
+                        onClick={() => handleFileClick(document)}
+                      >
                         {getFileIcon(document.type)}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
@@ -861,7 +876,14 @@ const AllFiles = () => {
                           <Avatar className="h-6 w-6">
                             <AvatarFallback>{document.modifiedByAvatar}</AvatarFallback>
                           </Avatar>
-                          <Button variant="ghost" size="icon">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Show context menu or actions
+                            }}
+                          >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               width="16"
@@ -891,13 +913,25 @@ const AllFiles = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
                   {filteredDocuments.length > 0 ? (
                     filteredDocuments.map((document) => (
-                      <Card key={document.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                      <Card
+                        key={document.id}
+                        className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => handleFileClick(document)}
+                      >
                         <div className="p-4 flex flex-col h-full">
                           <div className="flex items-start justify-between mb-3">
                             {getFileIcon(document.type)}
                             <div className="flex items-center">
                               {document.favorited && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Toggle favorite
+                                  }}
+                                >
                                   <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     width="14"
@@ -914,7 +948,15 @@ const AllFiles = () => {
                                   </svg>
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Show context menu or actions
+                                }}
+                              >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   width="14"
@@ -946,7 +988,16 @@ const AllFiles = () => {
                               </Avatar>
                               <span className="text-xs text-muted-foreground">{document.modifiedBy}</span>
                             </div>
-                            <Button variant="outline" size="sm">Open</Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFileClick(document);
+                              }}
+                            >
+                              Open
+                            </Button>
                           </div>
                         </div>
                       </Card>

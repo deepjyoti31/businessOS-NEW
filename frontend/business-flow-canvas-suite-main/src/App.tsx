@@ -46,6 +46,7 @@ import Analysis from "./pages/modules/documents/Analysis";
 import Shared from "./pages/modules/documents/Shared";
 import Templates from "./pages/modules/documents/Templates";
 import Archive from "./pages/modules/documents/Archive";
+import FileDetails from "./pages/modules/documents/FileDetails";
 
 // Administration Subpages
 import AdminDashboard from "./pages/modules/administration/Dashboard";
@@ -177,6 +178,7 @@ const App = () => (
                 <Route path="shared" element={<Shared />} />
                 <Route path="templates" element={<Templates />} />
                 <Route path="archive" element={<Archive />} />
+                <Route path="file/:fileId" element={<FileDetails />} />
               </Route>
 
               <Route path="inventory" element={<Inventory />} />

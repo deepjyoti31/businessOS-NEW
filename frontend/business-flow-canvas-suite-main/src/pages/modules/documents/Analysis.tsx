@@ -22,7 +22,7 @@ import {
   Loader2,
   RefreshCw
 } from "lucide-react";
-import { supabaseDocumentService } from "@/services/SupabaseDocumentService";
+import { documentService } from "@/services/documentServiceInstances";
 import { supabaseAIDocumentService, DocumentSearchResult } from "@/services/SupabaseAIDocumentService";
 import { FileMetadata } from "@/services/supabaseStorageService";
 
@@ -58,7 +58,7 @@ const Analysis = () => {
   const fetchDocuments = async () => {
     setIsLoading(true);
     try {
-      const fetchedDocuments = await supabaseDocumentService.getAllFiles();
+      const fetchedDocuments = await documentService.getAllFiles();
       setDocuments(fetchedDocuments);
     } catch (error) {
       console.error("Error fetching documents:", error);

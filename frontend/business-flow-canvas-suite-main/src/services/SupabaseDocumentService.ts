@@ -1,8 +1,20 @@
 import { supabaseStorageService, FileMetadata, UploadOptions } from './supabaseStorageService';
 import { supabase } from '@/config/supabaseClient';
 import { toast } from 'sonner';
+import { SupabaseDocumentSharingService } from './SupabaseDocumentSharingService';
+import { SupabaseVersionControlService } from './SupabaseVersionControlService';
+import { PermissionLevel } from '@/models/documentSharing';
 
 export class SupabaseDocumentService {
+  private sharingService: SupabaseDocumentSharingService;
+  private versionControlService: SupabaseVersionControlService;
+
+  constructor() {
+    // Initialize services
+    this.sharingService = new SupabaseDocumentSharingService();
+    this.versionControlService = new SupabaseVersionControlService();
+  }
+
   /**
    * Initialize the document service
    */
@@ -240,8 +252,135 @@ export class SupabaseDocumentService {
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
+
+  // Document Sharing Methods
+
+  /**
+   * Share a document with another user
+   * @param fileId The ID of the file to share
+   * @param sharedWithId The ID of the user to share with
+   * @param permissionLevel The permission level to grant
+   * @returns True if sharing was successful
+   */
+  async shareDocument(fileId: string, sharedWithId: string, permissionLevel: PermissionLevel): Promise<boolean> {
+    try {
+      const result = await this.sharingService.shareDocument({
+        file_id: fileId,
+        shared_with_id: sharedWithId,
+        permission_level: permissionLevel
+      });
+      return !!result;
+    } catch (error) {
+      console.error('Error sharing document:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all users a document is shared with
+   * @param fileId The ID of the file
+   * @returns Array of document shares with user information
+   */
+  async getDocumentShares(fileId: string) {
+    return this.sharingService.getDocumentShares(fileId);
+  }
+
+  /**
+   * Get all documents shared with the current user
+   * @returns Array of file metadata for shared documents
+   */
+  async getSharedWithMe() {
+    return this.sharingService.getSharedWithMe();
+  }
+
+  /**
+   * Update the permission level for a document share
+   * @param shareId The ID of the share to update
+   * @param permissionLevel The new permission level
+   * @returns True if the update was successful
+   */
+  async updateSharePermission(shareId: string, permissionLevel: PermissionLevel) {
+    return this.sharingService.updateSharePermission({
+      share_id: shareId,
+      permission_level: permissionLevel
+    });
+  }
+
+  /**
+   * Remove a document share
+   * @param shareId The ID of the share to remove
+   * @returns True if the removal was successful
+   */
+  async removeShare(shareId: string) {
+    return this.sharingService.removeShare(shareId);
+  }
+
+  /**
+   * Check if the current user has permission to access a document
+   * @param fileId The ID of the file
+   * @param requiredPermission The minimum permission level required
+   * @returns True if the user has the required permission
+   */
+  async hasPermission(fileId: string, requiredPermission: PermissionLevel) {
+    return this.sharingService.hasPermission(fileId, requiredPermission);
+  }
+
+  // Version Control Methods
+
+  /**
+   * Create a new version of a document
+   * @param fileId The ID of the file
+   * @param storagePath The storage path of the file
+   * @param size The size of the file
+   * @param comment Optional comment for the version
+   * @returns The created document version
+   */
+  async createVersion(fileId: string, storagePath: string, size?: number, comment?: string) {
+    return this.versionControlService.createVersion({
+      file_id: fileId,
+      storage_path: storagePath,
+      size,
+      comment
+    });
+  }
+
+  /**
+   * Get all versions of a document
+   * @param fileId The ID of the file
+   * @returns Array of document versions with user information
+   */
+  async getDocumentVersions(fileId: string) {
+    return this.versionControlService.getDocumentVersions(fileId);
+  }
+
+  /**
+   * Get a specific version of a document
+   * @param versionId The ID of the version
+   * @returns The document version with user information
+   */
+  async getDocumentVersion(versionId: string) {
+    return this.versionControlService.getDocumentVersion(versionId);
+  }
+
+  /**
+   * Restore a document to a specific version
+   * @param versionId The ID of the version to restore
+   * @returns True if the restoration was successful
+   */
+  async restoreVersion(versionId: string) {
+    return this.versionControlService.restoreVersion({ version_id: versionId });
+  }
+
+  /**
+   * Create a version when a file is updated
+   * @param fileMetadata The updated file metadata
+   * @param comment Optional comment for the version
+   * @returns The created document version
+   */
+  async createVersionOnUpdate(fileMetadata: FileMetadata, comment?: string) {
+    return this.versionControlService.createVersionOnUpdate(fileMetadata, comment);
+  }
 }
 
-// Export a singleton instance
-export const supabaseDocumentService = new SupabaseDocumentService();
-export default supabaseDocumentService;
+// Note: Singleton instances are now created in documentServiceInstances.ts
+// This prevents circular dependencies
