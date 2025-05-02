@@ -19,6 +19,7 @@ import ResetPassword from "./pages/auth/ResetPassword";
 // Dashboard Pages
 import Dashboard from "./pages/dashboard/Dashboard";
 import UserProfile from "./pages/dashboard/UserProfile";
+import Profile from "./pages/dashboard/Profile";
 import Settings from "./pages/dashboard/Settings";
 import TeamCollaborationPage from "./pages/dashboard/TeamCollaborationPage";
 import ChatPage from "./pages/dashboard/ChatPage";
@@ -112,7 +113,8 @@ const App = () => (
             {/* Protected Dashboard Routes */}
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
-              <Route path="profile" element={<UserProfile />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="user-profile" element={<UserProfile />} />
               <Route path="settings" element={<Settings />} />
               <Route path="team-collaboration" element={<TeamCollaborationPage />} />
               <Route path="chat" element={<ChatPage />} />

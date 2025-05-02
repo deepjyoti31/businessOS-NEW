@@ -1,69 +1,141 @@
 
-import { useState } from "react";
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+import { useState, useEffect } from "react";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Search, Plus, MoreHorizontal, Sparkles, Users } from "lucide-react";
+import { Shield, Search, Plus, MoreHorizontal, Sparkles, Users, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import RoleService, { Role } from "@/services/RoleService";
+import PermissionService from "@/services/PermissionService";
+import CreateRoleDialog from "@/components/admin/CreateRoleDialog";
+import EditRoleDialog from "@/components/admin/EditRoleDialog";
+import ManagePermissionsDialog from "@/components/admin/ManagePermissionsDialog";
+import ViewRoleUsersDialog from "@/components/admin/ViewRoleUsersDialog";
+import DeleteRoleDialog from "@/components/admin/DeleteRoleDialog";
 
 const AdminRoles = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Mock roles data
-  const roles = [
-    {
-      id: "1",
-      name: "Administrator",
-      description: "Full access to all system features",
-      users: 2,
-      permissions: 24,
-      createdAt: "2023-01-15",
-    },
-    {
-      id: "2",
-      name: "Manager",
-      description: "Access to manage users and projects",
-      users: 3,
-      permissions: 18,
-      createdAt: "2023-01-20",
-    },
-    {
-      id: "3",
-      name: "User",
-      description: "Basic system access",
-      users: 12,
-      permissions: 8,
-      createdAt: "2023-01-25",
-    },
-    {
-      id: "4",
-      name: "Viewer",
-      description: "Read-only access to reports and dashboards",
-      users: 5,
-      permissions: 5,
-      createdAt: "2023-02-10",
-    },
-    {
-      id: "5",
-      name: "Guest",
-      description: "Limited temporary access",
-      users: 1,
-      permissions: 3,
-      createdAt: "2023-03-05",
-    },
-  ];
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [permissionCategories, setPermissionCategories] = useState<string[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [customRoles, setCustomRoles] = useState(0);
 
-  // Filter roles based on search term
-  const filteredRoles = roles.filter((role) =>
-    role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    role.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Dialog states
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
+  // Fetch roles and categories in parallel
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch roles and categories in parallel
+        const [rolesData, categoriesData] = await Promise.all([
+          RoleService.getAllRoles(searchTerm),
+          PermissionService.getPermissionCategories()
+        ]);
+
+        setRoles(rolesData);
+        setPermissionCategories(categoriesData);
+
+        // Count custom roles (non-system roles)
+        const customRolesCount = rolesData.filter(role => !role.is_system).length;
+        setCustomRoles(customRolesCount);
+
+        // For the initial load, just set a placeholder for total users
+        // We'll fetch the actual count separately to avoid blocking the UI
+        setTotalUsers(0);
+      } catch (error) {
+        console.error("Error fetching roles:", error);
+        toast.error("Failed to load roles");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce search to avoid too many API calls
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Calculate total users from role data
+  useEffect(() => {
+    if (roles.length > 0) {
+      // Calculate total users from the user_count property
+      const count = roles.reduce((sum, role) => sum + (role.user_count || 0), 0);
+      setTotalUsers(count);
+    }
+  }, [roles]);
+
+  // Handle role operations
+  const handleCreateRole = async (newRole: any) => {
+    try {
+      await RoleService.createRole(newRole);
+      toast.success("Role created successfully");
+      // Refresh the roles list
+      const data = await RoleService.getAllRoles(searchTerm);
+      setRoles(data);
+      setIsCreateDialogOpen(false);
+    } catch (error) {
+      console.error("Error creating role:", error);
+      toast.error("Failed to create role");
+    }
+  };
+
+  const handleEditRole = async (roleId: string, roleData: any) => {
+    try {
+      await RoleService.updateRole(roleId, roleData);
+      toast.success("Role updated successfully");
+      // Refresh the roles list
+      const data = await RoleService.getAllRoles(searchTerm);
+      setRoles(data);
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error(`Error updating role ${roleId}:`, error);
+      toast.error("Failed to update role");
+    }
+  };
+
+  const handleDeleteRole = async (roleId: string) => {
+    try {
+      await RoleService.deleteRole(roleId);
+      toast.success("Role deleted successfully");
+      // Refresh the roles list
+      const data = await RoleService.getAllRoles(searchTerm);
+      setRoles(data);
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      console.error(`Error deleting role ${roleId}:`, error);
+      toast.error("Failed to delete role");
+    }
+  };
+
+  // Format date for display
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "N/A";
+    try {
+      return format(parseISO(dateString), "MMM d, yyyy");
+    } catch (error) {
+      return dateString;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -78,9 +150,13 @@ const AdminRoles = () => {
             Create and manage roles with customized permissions
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
-          <Button variant="default" className="flex items-center">
+          <Button
+            variant="default"
+            className="flex items-center"
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Create Role
           </Button>
@@ -102,32 +178,32 @@ const AdminRoles = () => {
             <Shield className="h-8 w-8 text-purple-500" />
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Users Assigned</p>
-              <p className="text-2xl font-bold">{roles.reduce((acc, role) => acc + role.users, 0)}</p>
+              <p className="text-2xl font-bold">{totalUsers}</p>
             </div>
             <Users className="h-8 w-8 text-blue-500" />
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Permission Categories</p>
-              <p className="text-2xl font-bold">8</p>
+              <p className="text-2xl font-bold">{permissionCategories.length}</p>
             </div>
             <Shield className="h-8 w-8 text-green-500" />
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Custom Roles</p>
-              <p className="text-2xl font-bold">2</p>
+              <p className="text-2xl font-bold">{customRoles}</p>
             </div>
             <Shield className="h-8 w-8 text-amber-500" />
           </CardContent>
@@ -155,34 +231,42 @@ const AdminRoles = () => {
             <TableRow>
               <TableHead>Role Name</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Users</TableHead>
-              <TableHead>Permissions</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRoles.length > 0 ? (
-              filteredRoles.map((role) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-10">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    <span>Loading roles...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : roles.length > 0 ? (
+              roles.map((role) => (
                 <TableRow key={role.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center">
                       {role.name}
-                      {role.name === "Administrator" && (
-                        <Badge className="ml-2 bg-purple-100 text-purple-800 hover:bg-purple-100">
-                          System
-                        </Badge>
-                      )}
                     </div>
                   </TableCell>
-                  <TableCell>{role.description}</TableCell>
-                  <TableCell>{role.users}</TableCell>
+                  <TableCell>{role.description || "No description"}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="font-mono">
-                      {role.permissions}
-                    </Badge>
+                    {role.is_system ? (
+                      <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
+                        System
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                        Custom
+                      </Badge>
+                    )}
                   </TableCell>
-                  <TableCell>{role.createdAt}</TableCell>
+                  <TableCell>{formatDate(role.created_at)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -191,12 +275,35 @@ const AdminRoles = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit Role</DropdownMenuItem>
-                        <DropdownMenuItem>Manage Permissions</DropdownMenuItem>
-                        <DropdownMenuItem>View Users</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          Delete Role
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedRoleId(role.id);
+                          setIsEditDialogOpen(true);
+                        }}>
+                          Edit Role
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedRoleId(role.id);
+                          setIsPermissionsDialogOpen(true);
+                        }}>
+                          Manage Permissions
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedRoleId(role.id);
+                          setIsUsersDialogOpen(true);
+                        }}>
+                          View Users
+                        </DropdownMenuItem>
+                        {!role.is_system && (
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => {
+                              setSelectedRoleId(role.id);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            Delete Role
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -204,7 +311,7 @@ const AdminRoles = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                   No roles found matching your search.
                 </TableCell>
               </TableRow>
@@ -220,7 +327,7 @@ const AdminRoles = () => {
           <div>
             <h3 className="font-medium">AI Permission Analysis</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Based on your organization's usage patterns, we recommend reviewing the "Manager" role permissions. 
+              Based on your organization's usage patterns, we recommend reviewing the "Manager" role permissions.
               Consider adding "Project Export" capabilities for improved workflow.
             </p>
             <div className="mt-3">
@@ -234,6 +341,49 @@ const AdminRoles = () => {
           </div>
         </div>
       </div>
+
+      {/* Dialog components for role management */}
+      {isCreateDialogOpen && (
+        <CreateRoleDialog
+          isOpen={isCreateDialogOpen}
+          onClose={() => setIsCreateDialogOpen(false)}
+          onCreateRole={handleCreateRole}
+        />
+      )}
+
+      {isEditDialogOpen && selectedRoleId && (
+        <EditRoleDialog
+          isOpen={isEditDialogOpen}
+          onClose={() => setIsEditDialogOpen(false)}
+          roleId={selectedRoleId}
+          onUpdateRole={handleEditRole}
+        />
+      )}
+
+      {isPermissionsDialogOpen && selectedRoleId && (
+        <ManagePermissionsDialog
+          isOpen={isPermissionsDialogOpen}
+          onClose={() => setIsPermissionsDialogOpen(false)}
+          roleId={selectedRoleId}
+        />
+      )}
+
+      {isUsersDialogOpen && selectedRoleId && (
+        <ViewRoleUsersDialog
+          isOpen={isUsersDialogOpen}
+          onClose={() => setIsUsersDialogOpen(false)}
+          roleId={selectedRoleId}
+        />
+      )}
+
+      {isDeleteDialogOpen && selectedRoleId && (
+        <DeleteRoleDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          roleId={selectedRoleId}
+          onDeleteRole={handleDeleteRole}
+        />
+      )}
     </div>
   );
 };

@@ -1,69 +1,124 @@
 
-import { useState } from "react";
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+import { useState, useEffect } from "react";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Users, Search, UserPlus, MoreHorizontal, Sparkles } from "lucide-react";
+import { Users, Search, UserPlus, MoreHorizontal, Sparkles, Loader2 } from "lucide-react";
+import UserService, { UserProfile } from "@/services/UserService";
+import UserDetailDialog from "@/components/admin/UserDetailDialog";
+import { toast } from "sonner";
+import { format, formatDistanceToNow, parseISO } from "date-fns";
 
 const AdminUsers = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Mock user data
-  const users = [
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john.doe@example.com",
-      role: "Administrator",
-      status: "Active",
-      lastActive: "Today at 10:30 AM",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      role: "Manager",
-      status: "Active",
-      lastActive: "Today at 9:15 AM",
-    },
-    {
-      id: "3",
-      name: "Robert Johnson",
-      email: "robert.johnson@example.com",
-      role: "User",
-      status: "Inactive",
-      lastActive: "Yesterday at 2:45 PM",
-    },
-    {
-      id: "4",
-      name: "Emily Davis",
-      email: "emily.davis@example.com",
-      role: "User",
-      status: "Active",
-      lastActive: "Today at 11:20 AM",
-    },
-    {
-      id: "5",
-      name: "Michael Wilson",
-      email: "michael.wilson@example.com",
-      role: "Manager",
-      status: "Active",
-      lastActive: "Today at 8:50 AM",
-    },
-  ];
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
-  // Filter users based on search term
-  const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Fetch users from API
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const data = await UserService.getAllUsers(searchTerm, statusFilter);
+        setUsers(data);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        toast.error("Failed to load users");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce search to avoid too many API calls
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, statusFilter]);
+
+  // Format the last active date
+  const formatLastActive = (lastActiveDate?: string) => {
+    if (!lastActiveDate) return "Never";
+
+    try {
+      const date = parseISO(lastActiveDate);
+      const now = new Date();
+
+      // If it's today, show the time
+      if (date.toDateString() === now.toDateString()) {
+        return `Today at ${format(date, "h:mm a")}`;
+      }
+
+      // If it's yesterday, show "Yesterday"
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      if (date.toDateString() === yesterday.toDateString()) {
+        return `Yesterday at ${format(date, "h:mm a")}`;
+      }
+
+      // Otherwise, show relative time
+      return formatDistanceToNow(date, { addSuffix: true });
+    } catch (error) {
+      return lastActiveDate;
+    }
+  };
+
+  // Handle user status change
+  const handleStatusChange = async (userId: string, newStatus: string) => {
+    try {
+      await UserService.updateUserStatus(userId, newStatus.toLowerCase());
+
+      // Update the local state
+      setUsers(users.map(user =>
+        user.id === userId
+          ? { ...user, status: newStatus.toLowerCase() }
+          : user
+      ));
+
+      toast.success(`User status updated to ${newStatus}`);
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      toast.error("Failed to update user status");
+    }
+  };
+
+  // Handle bulk status change
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedUsers.length === 0) {
+      toast.warning("No users selected");
+      return;
+    }
+
+    try {
+      await UserService.bulkUpdateStatus(selectedUsers, newStatus.toLowerCase());
+
+      // Update the local state
+      setUsers(users.map(user =>
+        selectedUsers.includes(user.id)
+          ? { ...user, status: newStatus.toLowerCase() }
+          : user
+      ));
+
+      // Clear selection
+      setSelectedUsers([]);
+
+      toast.success(`${selectedUsers.length} users updated to ${newStatus}`);
+    } catch (error) {
+      console.error("Error updating user status in bulk:", error);
+      toast.error("Failed to update users");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -78,7 +133,7 @@ const AdminUsers = () => {
             Manage users, assign roles, and control access permissions
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Button variant="default" className="flex items-center">
             <UserPlus className="mr-2 h-4 w-4" />
@@ -103,8 +158,42 @@ const AdminUsers = () => {
           />
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">Filter</Button>
-          <Button variant="outline">Export</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                {statusFilter ? `Status: ${statusFilter}` : "Filter by Status"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setStatusFilter(undefined)}>
+                All Users
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("active")}>
+                Active Users
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("inactive")}>
+                Inactive Users
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {selectedUsers.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  Bulk Actions ({selectedUsers.length})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleBulkStatusChange("active")}>
+                  Set Active
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBulkStatusChange("inactive")}>
+                  Set Inactive
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
@@ -122,25 +211,34 @@ const AdminUsers = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredUsers.length > 0 ? (
-              filteredUsers.map((user) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-10">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    <span>Loading users...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : users.length > 0 ? (
+              users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.role}</TableCell>
+                  <TableCell className="font-medium">{user.name || "Unnamed User"}</TableCell>
+                  <TableCell>{user.email || "No email"}</TableCell>
+                  <TableCell>{user.role || "User"}</TableCell>
                   <TableCell>
-                    <Badge 
-                      variant={user.status === "Active" ? "default" : "secondary"}
+                    <Badge
+                      variant={user.status === "active" ? "default" : "secondary"}
                       className={`${
-                        user.status === "Active" 
-                          ? "bg-green-100 text-green-800 hover:bg-green-100" 
+                        user.status === "active"
+                          ? "bg-green-100 text-green-800 hover:bg-green-100"
                           : "bg-gray-100 text-gray-800 hover:bg-gray-100"
                       }`}
                     >
-                      {user.status}
+                      {user.status === "active" ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{user.lastActive}</TableCell>
+                  <TableCell>{formatLastActive(user.last_active)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -149,12 +247,29 @@ const AdminUsers = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit User</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedUserId(user.id);
+                          setIsDetailDialogOpen(true);
+                        }}>
+                          Edit User
+                        </DropdownMenuItem>
                         <DropdownMenuItem>Reset Password</DropdownMenuItem>
                         <DropdownMenuItem>Change Role</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          Disable Account
-                        </DropdownMenuItem>
+                        {user.status === "active" ? (
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => handleStatusChange(user.id, "inactive")}
+                          >
+                            Deactivate Account
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="text-green-600"
+                            onClick={() => handleStatusChange(user.id, "active")}
+                          >
+                            Activate Account
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -182,6 +297,30 @@ const AdminUsers = () => {
         </div>
         <Button variant="outline" className="border-blue-200 hover:bg-blue-100">Open Assistant</Button>
       </div>
+
+      {/* User Detail Dialog */}
+      <UserDetailDialog
+        userId={selectedUserId}
+        isOpen={isDetailDialogOpen}
+        onClose={() => setIsDetailDialogOpen(false)}
+        onUserUpdated={() => {
+          // Refresh the user list
+          const fetchUsers = async () => {
+            try {
+              setLoading(true);
+              const data = await UserService.getAllUsers(searchTerm, statusFilter);
+              setUsers(data);
+            } catch (error) {
+              console.error("Error fetching users:", error);
+              toast.error("Failed to refresh user list");
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          fetchUsers();
+        }}
+      />
     </div>
   );
 };

@@ -91,7 +91,7 @@ const Sidebar = ({ className }: SidebarProps) => {
     return location.pathname.startsWith(basePath);
   };
 
-  // Define userNavItems that was missing
+  // Define userNavItems
   const userNavItems = [
     {
       title: "My Profile",

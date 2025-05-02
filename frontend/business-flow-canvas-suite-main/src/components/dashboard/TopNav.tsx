@@ -1,12 +1,13 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/SupabaseAuthContext";
 import {
   Menu,
   Search,
   X,
-  ChevronDown
+  ChevronDown,
+  User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import NotificationCenter from "./NotificationCenter";
 import DataExport from "./DataExport";
+import UserService, { UserProfile } from "@/services/UserService";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -28,6 +30,23 @@ interface TopNavProps {
 const TopNav = ({ onMenuClick }: TopNavProps) => {
   const { user, logout } = useAuth();
   const [showSearch, setShowSearch] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Fetch user profile
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user) return;
+
+      try {
+        const profile = await UserService.getCurrentUserProfile();
+        setUserProfile(profile);
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
 
   return (
     <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-background px-4 shadow-sm">
@@ -83,13 +102,13 @@ const TopNav = ({ onMenuClick }: TopNavProps) => {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-8 gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.avatar} alt={user?.name} />
+                <AvatarImage src={userProfile?.avatar_url || "/avatar-placeholder.png"} alt={userProfile?.name || user?.name} />
                 <AvatarFallback>
-                  {user?.name?.charAt(0) || "U"}
+                  {userProfile?.name?.charAt(0) || user?.name?.charAt(0) || "U"}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden md:inline-block font-normal">
-                {user?.name}
+                {userProfile?.name || user?.name}
               </span>
               <ChevronDown size={14} className="text-muted-foreground" />
             </Button>
