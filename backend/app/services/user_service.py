@@ -2,11 +2,18 @@ import os
 from typing import Dict, List, Optional, Any
 import logging
 from datetime import datetime
+import time
+from functools import lru_cache
 
 import supabase
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
+
+# Cache for user profiles
+user_cache = {}
+# Cache expiration time in seconds (5 minutes)
+CACHE_EXPIRATION = 300
 
 class UserService:
     """Service for managing users and profiles in Supabase."""
@@ -95,16 +102,28 @@ class UserService:
             logger.error(f"Error getting users: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error getting users: {str(e)}")
 
-    async def get_user_by_id(self, user_id: str) -> Dict[str, Any]:
+    async def get_user_by_id(self, user_id: str, use_cache: bool = True) -> Dict[str, Any]:
         """
         Get a user profile by ID.
 
         Args:
             user_id: The user's UUID
+            use_cache: Whether to use the cache (default: True)
 
         Returns:
             User profile data
         """
+        # Check cache first if use_cache is True
+        if use_cache and user_id in user_cache:
+            cache_entry = user_cache[user_id]
+            # Check if cache is still valid
+            if time.time() - cache_entry["timestamp"] < CACHE_EXPIRATION:
+                logger.info(f"Using cached data for user {user_id}")
+                return cache_entry["data"]
+            else:
+                # Cache expired, remove it
+                del user_cache[user_id]
+
         try:
             response = self.supabase.table("profiles").select("*").eq("id", user_id).single().execute()
 
@@ -120,6 +139,14 @@ class UserService:
             if auth_user_response.data and len(auth_user_response.data) > 0:
                 # The RPC function returns a list, so we need to get the first item
                 response.data["email"] = auth_user_response.data[0].get("email", "")
+
+            # Store in cache
+            if use_cache:
+                user_cache[user_id] = {
+                    "data": response.data,
+                    "timestamp": time.time()
+                }
+                logger.info(f"Cached user data for {user_id}")
 
             return response.data
 
@@ -151,6 +178,11 @@ class UserService:
 
             if not response.data or len(response.data) == 0:
                 raise HTTPException(status_code=404, detail=f"User with ID {user_id} not found")
+
+            # Invalidate cache for this user
+            if user_id in user_cache:
+                del user_cache[user_id]
+                logger.info(f"Invalidated cache for user {user_id}")
 
             return response.data[0]
 
