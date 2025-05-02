@@ -117,7 +117,7 @@ export class SupabaseAIDocumentService {
    */
   async searchDocuments(
     queryText: string,
-    matchThreshold: number = 0.7,
+    matchThreshold: number = 0.5,
     matchCount: number = 10
   ): Promise<DocumentSearchResponse> {
     try {
@@ -141,8 +141,27 @@ export class SupabaseAIDocumentService {
         }
 
         // Parse the response
-        const result: DocumentSearchResponse = await response.json();
-        return result;
+        const rawResult: DocumentSearchResponse = await response.json();
+
+        // Process the results to ensure proper date formatting
+        if (rawResult.success && rawResult.results && rawResult.results.length > 0) {
+          // Ensure dates are properly formatted
+          const processedResults = rawResult.results.map(result => ({
+            ...result,
+            // Convert date strings to proper format or set to null if invalid
+            createdAt: result.createdAt && result.createdAt !== 'null' ? result.createdAt : null,
+            updatedAt: result.updatedAt && result.updatedAt !== 'null' ? result.updatedAt : null,
+            lastAccessedAt: result.lastAccessedAt && result.lastAccessedAt !== 'null' ? result.lastAccessedAt : null,
+            processed_at: result.processed_at && result.processed_at !== 'null' ? result.processed_at : null
+          }));
+
+          return {
+            ...rawResult,
+            results: processedResults
+          };
+        }
+
+        return rawResult;
       } catch (apiError) {
         console.error('Error calling document search API:', apiError);
 
@@ -186,9 +205,10 @@ export class SupabaseAIDocumentService {
             type: file.type,
             isFolder: file.is_folder,
             parentId: file.parent_id,
-            createdAt: file.created_at,
-            updatedAt: file.updated_at,
-            lastAccessedAt: file.last_accessed_at,
+            // Ensure dates are properly formatted or set to null if invalid
+            createdAt: file.created_at && file.created_at !== 'null' ? file.created_at : null,
+            updatedAt: file.updated_at && file.updated_at !== 'null' ? file.updated_at : null,
+            lastAccessedAt: file.last_accessed_at && file.last_accessed_at !== 'null' ? file.last_accessed_at : null,
             storagePath: file.storage_path,
             isFavorite: file.is_favorite,
             isArchived: file.is_archived,

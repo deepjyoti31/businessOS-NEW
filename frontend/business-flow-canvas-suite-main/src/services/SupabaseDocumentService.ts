@@ -199,7 +199,7 @@ export class SupabaseDocumentService {
         throw error;
       }
 
-      // Convert snake_case to camelCase
+      // Convert snake_case to camelCase and ensure proper date handling
       return data.map(item => ({
         id: item.id,
         name: item.name,
@@ -208,13 +208,16 @@ export class SupabaseDocumentService {
         type: item.type,
         isFolder: item.is_folder,
         parentId: item.parent_id,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
-        lastAccessedAt: item.last_accessed_at,
+        // Ensure dates are properly formatted or set to null if invalid
+        createdAt: item.created_at && item.created_at !== 'null' ? item.created_at : null,
+        updatedAt: item.updated_at && item.updated_at !== 'null' ? item.updated_at : null,
+        lastAccessedAt: item.last_accessed_at && item.last_accessed_at !== 'null' ? item.last_accessed_at : null,
         storagePath: item.storage_path,
         isFavorite: item.is_favorite,
         isArchived: item.is_archived,
-        metadata: item.metadata
+        metadata: item.metadata,
+        // Include processing status if available
+        processing_status: item.processing_status || null
       }));
     } catch (error) {
       console.error('Error getting all files:', error);

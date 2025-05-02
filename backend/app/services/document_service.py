@@ -531,7 +531,7 @@ async def batch_process_documents(file_ids: List[str]) -> BatchProcessingResult:
         )
 
 
-async def search_documents(query_text: str, match_threshold: float = 0.7, match_count: int = 10) -> DocumentSearchResponse:
+async def search_documents(query_text: str, match_threshold: float = 0.5, match_count: int = 10) -> DocumentSearchResponse:
     """Search for documents similar to the query text."""
     try:
         print(f"Searching for documents similar to: {query_text}")
@@ -558,8 +558,29 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
                 print(f"Search response: {search_response}")
 
                 if not search_response.data:
-                    print("No matching documents found")
-                    return DocumentSearchResponse(success=True, results=[])
+                    print(f"No matching documents found with threshold {match_threshold}")
+
+                    # If no results with the initial threshold, try with a lower threshold
+                    if match_threshold > 0.3:
+                        lower_threshold = max(0.3, match_threshold - 0.2)
+                        print(f"Trying again with lower threshold: {lower_threshold}")
+
+                        search_response = supabase_client.rpc(
+                            "search_documents",
+                            {
+                                "query_embedding": query_embedding,
+                                "match_threshold": lower_threshold,
+                                "match_count": match_count
+                            }
+                        ).execute()
+
+                        print(f"Search response with lower threshold: {search_response}")
+
+                        if not search_response.data:
+                            print(f"Still no matching documents found with lower threshold {lower_threshold}")
+                            return DocumentSearchResponse(success=True, results=[])
+                    else:
+                        return DocumentSearchResponse(success=True, results=[])
 
                 # Get file metadata for the matching documents
                 file_ids = [item["id"] for item in search_response.data]
@@ -580,6 +601,37 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
 
                     try:
                         # Convert to our model format
+                        # Ensure dates are properly formatted
+                        created_at = file.get("created_at")
+                        updated_at = file.get("updated_at")
+                        last_accessed_at = file.get("last_accessed_at")
+                        processed_at = file.get("processed_at")
+
+                        # Convert to datetime objects if they're strings
+                        if isinstance(created_at, str):
+                            try:
+                                created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                created_at = None
+
+                        if isinstance(updated_at, str):
+                            try:
+                                updated_at = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                updated_at = None
+
+                        if isinstance(last_accessed_at, str):
+                            try:
+                                last_accessed_at = datetime.fromisoformat(last_accessed_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                last_accessed_at = None
+
+                        if isinstance(processed_at, str):
+                            try:
+                                processed_at = datetime.fromisoformat(processed_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                processed_at = None
+
                         file_metadata = FileMetadata(
                             id=file["id"],
                             name=file["name"],
@@ -588,9 +640,9 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
                             type=file.get("type", ""),
                             is_folder=file.get("is_folder", False),
                             parent_id=file.get("parent_id"),
-                            created_at=file["created_at"],
-                            updated_at=file.get("updated_at"),
-                            last_accessed_at=file.get("last_accessed_at"),
+                            created_at=created_at,
+                            updated_at=updated_at,
+                            last_accessed_at=last_accessed_at,
                             storage_path=file.get("storage_path", ""),
                             is_favorite=file.get("is_favorite", False),
                             is_archived=file.get("is_archived", False),
@@ -600,7 +652,7 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
                             entities=Entity.model_validate_json(file["entities"]) if file.get("entities") else None,
                             topics=json.loads(file["topics"]) if file.get("topics") else None,
                             sentiment=Sentiment.model_validate_json(file["sentiment"]) if file.get("sentiment") else None,
-                            processed_at=file.get("processed_at")
+                            processed_at=processed_at
                         )
 
                         # Create search result with similarity score
@@ -648,6 +700,37 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
 
                     # Convert to our model format
                     try:
+                        # Ensure dates are properly formatted
+                        created_at = file.get("created_at")
+                        updated_at = file.get("updated_at")
+                        last_accessed_at = file.get("last_accessed_at")
+                        processed_at = file.get("processed_at")
+
+                        # Convert to datetime objects if they're strings
+                        if isinstance(created_at, str):
+                            try:
+                                created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                created_at = None
+
+                        if isinstance(updated_at, str):
+                            try:
+                                updated_at = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                updated_at = None
+
+                        if isinstance(last_accessed_at, str):
+                            try:
+                                last_accessed_at = datetime.fromisoformat(last_accessed_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                last_accessed_at = None
+
+                        if isinstance(processed_at, str):
+                            try:
+                                processed_at = datetime.fromisoformat(processed_at.replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                processed_at = None
+
                         file_metadata = FileMetadata(
                             id=file["id"],
                             name=file["name"],
@@ -656,9 +739,9 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
                             type=file.get("type", ""),
                             is_folder=file.get("is_folder", False),
                             parent_id=file.get("parent_id"),
-                            created_at=file["created_at"],
-                            updated_at=file.get("updated_at"),
-                            last_accessed_at=file.get("last_accessed_at"),
+                            created_at=created_at,
+                            updated_at=updated_at,
+                            last_accessed_at=last_accessed_at,
                             storage_path=file.get("storage_path", ""),
                             is_favorite=file.get("is_favorite", False),
                             is_archived=file.get("is_archived", False),
@@ -668,7 +751,7 @@ async def search_documents(query_text: str, match_threshold: float = 0.7, match_
                             entities=Entity.model_validate_json(file["entities"]) if file.get("entities") else None,
                             topics=json.loads(file["topics"]) if file.get("topics") else None,
                             sentiment=Sentiment.model_validate_json(file["sentiment"]) if file.get("sentiment") else None,
-                            processed_at=file.get("processed_at")
+                            processed_at=processed_at
                         )
 
                         # Create search result with similarity score

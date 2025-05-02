@@ -487,11 +487,21 @@ The current UI implementation provides a solid foundation with most required com
    - Implement auto-scaling for document processing workloads
 
 ## Status Updates
-Last Updated: 2024-09-03
+Last Updated: 2024-09-04
 Current Sprint: Sprint 4 (Document Collaboration)
 Overall Progress: 95%
 
 ### Latest Update
+- Fixed semantic search functionality by lowering the similarity threshold and improving date handling:
+  - Modified the search_documents function to use a lower default threshold (0.5 instead of 0.7)
+  - Added automatic threshold reduction when no results are found (tries again with threshold - 0.2)
+  - Improved date handling in both vector search and keyword fallback search
+  - Added proper date string parsing and validation in the backend
+  - Updated frontend to handle null/invalid dates properly in search results
+  - Fixed "No date" display issue in search results by normalizing date formats
+  - Improved error handling for missing or invalid date values
+
+Previous Update:
 - Fixed AI Document Analysis page by adding proper JSON parsing for entities, topics, and sentiment data
 - Improved summary formatting to remove markdown and "Summary:" labels
 - Added type checking and null checks for all AI-generated data in the Analysis component
