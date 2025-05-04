@@ -69,6 +69,7 @@ import FinanceTransactions from "./pages/modules/finance/Transactions";
 import FinanceReports from "./pages/modules/finance/Reports";
 import FinanceInvoicing from "./pages/modules/finance/Invoicing";
 import FinanceBudgeting from "./pages/modules/finance/Budgeting";
+import BudgetAnalysis from "./pages/modules/finance/BudgetAnalysis";
 import FinanceClients from "./pages/modules/finance/Clients";
 import InvoiceCreate from "./pages/modules/finance/InvoiceCreate";
 import InvoiceEdit from "./pages/modules/finance/InvoiceEdit";
@@ -151,6 +152,7 @@ const App = () => (
                 <Route path="reports" element={<FinanceReports />} />
                 <Route path="invoicing" element={<FinanceInvoicing />} />
                 <Route path="budgeting" element={<FinanceBudgeting />} />
+                <Route path="budget-analysis/:budgetId" element={<BudgetAnalysis />} />
                 <Route path="clients" element={<FinanceClients />} />
                 <Route path="invoices/create" element={<InvoiceCreate />} />
                 <Route path="invoices/edit/:id" element={<InvoiceEdit />} />

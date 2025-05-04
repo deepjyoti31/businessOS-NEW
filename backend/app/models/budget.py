@@ -2,7 +2,7 @@
 Budget models for the finance module.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, validator
@@ -138,6 +138,18 @@ class BudgetFilter(BaseModel):
     search: Optional[str] = None
 
 
+class CategoryPerformance(BaseModel):
+    """Model for category performance metrics."""
+    id: str
+    name: str
+    allocated_amount: float
+    spent_amount: float
+    remaining_amount: float
+    spending_percentage: float
+    status: str
+    monthly_spending: Optional[Dict[str, float]] = None
+    trend: Optional[str] = None  # "increasing", "decreasing", "stable"
+
 class BudgetPerformance(BaseModel):
     """Model for budget performance metrics."""
     budget_id: UUID
@@ -147,4 +159,8 @@ class BudgetPerformance(BaseModel):
     remaining_budget: float
     allocation_percentage: float
     spending_percentage: float
-    categories: List[dict]
+    categories: List[CategoryPerformance]
+    monthly_spending: Optional[Dict[str, float]] = None
+    monthly_trend: Optional[str] = None  # "increasing", "decreasing", "stable"
+    projected_end_status: Optional[str] = None  # "under_budget", "on_track", "over_budget"
+    last_updated: Optional[datetime] = None

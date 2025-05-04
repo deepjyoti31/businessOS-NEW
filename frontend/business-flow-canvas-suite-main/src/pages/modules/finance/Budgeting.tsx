@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -11,14 +12,17 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, BarChart3 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { BudgetService, Budget, BudgetPerformance } from "@/services/BudgetService";
 import { TransactionService, Transaction } from "@/services/TransactionService";
 import { CreateBudgetDialog } from "@/components/budget/CreateBudgetDialog";
+import { CategoryManagementDialog } from "@/components/budget/CategoryManagementDialog";
+import { ROUTES } from "@/config/constants";
 
 const FinanceBudgeting = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeBudget, setActiveBudget] = useState<Budget | null>(null);
@@ -215,6 +219,16 @@ const FinanceBudgeting = () => {
               <CardContent>
                 <div className="text-2xl font-bold">${budgetData.totalBudget.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Fiscal Year {activeBudget.fiscal_year}</p>
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => navigate(`${ROUTES.FINANCE_BUDGET_ANALYSIS}/${activeBudget.id}`)}
+                  >
+                    View Analysis
+                  </Button>
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -262,7 +276,22 @@ const FinanceBudgeting = () => {
                   Breakdown of allocated budget by department
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm">Manage Categories</Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`${ROUTES.FINANCE_BUDGET_ANALYSIS}/${activeBudget.id}`)}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analysis
+                </Button>
+                <CategoryManagementDialog
+                  budgetId={activeBudget.id}
+                  onCategoriesUpdated={fetchBudgetData}
+                >
+                  <Button variant="outline" size="sm">Manage Categories</Button>
+                </CategoryManagementDialog>
+              </div>
             </CardHeader>
             <CardContent>
               {budgetPerformance && budgetPerformance.categories.length > 0 ? (
@@ -302,7 +331,12 @@ const FinanceBudgeting = () => {
               ) : (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">No budget categories found.</p>
-                  <Button variant="outline">Add Category</Button>
+                  <CategoryManagementDialog
+                    budgetId={activeBudget.id}
+                    onCategoriesUpdated={fetchBudgetData}
+                  >
+                    <Button variant="outline">Add Category</Button>
+                  </CategoryManagementDialog>
                 </div>
               )}
             </CardContent>

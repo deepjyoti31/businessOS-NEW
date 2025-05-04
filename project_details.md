@@ -156,6 +156,41 @@ BusinessOS is an AI-first business management platform designed for small busine
   - updated_at (timestamp)
   - is_deleted (boolean)
 
+- **budgets**: Budget information
+  - id (UUID)
+  - user_id (UUID, references auth.users.id)
+  - name (string)
+  - description (text, nullable)
+  - fiscal_year (string)
+  - start_date (timestamp)
+  - end_date (timestamp)
+  - total_amount (decimal)
+  - status (string, 'Draft', 'Active', 'Completed')
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
+- **budget_categories**: Budget categories
+  - id (UUID)
+  - budget_id (UUID, references budgets.id)
+  - name (string)
+  - description (text, nullable)
+  - allocated_amount (decimal)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
+- **budget_expenses**: Expenses linked to budget categories
+  - id (UUID)
+  - budget_category_id (UUID, references budget_categories.id)
+  - transaction_id (UUID, references transactions.id)
+  - amount (decimal)
+  - date (timestamp)
+  - description (text)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
 #### Administration
 - **roles**: User roles
   - id (UUID)
@@ -312,6 +347,54 @@ BusinessOS is an AI-first business management platform designed for small busine
   - Query Parameters: start_date, end_date
   - Response: Expense breakdown report with summary and expense category data
 
+#### Budget Management
+- **GET /api/finance/budgets**
+  - Get all budgets with optional filtering, pagination, and sorting
+  - Query Parameters: page, page_size, sort_by, sort_order, status, fiscal_year, start_date, end_date
+  - Response: List of budgets
+
+- **GET /api/finance/budgets/{budget_id}**
+  - Get a specific budget by ID
+  - Response: Budget details with categories
+
+- **POST /api/finance/budgets**
+  - Create a new budget
+  - Request: Budget creation parameters (name, description, fiscal_year, start_date, end_date, total_amount, status)
+  - Response: Created budget details
+
+- **PUT /api/finance/budgets/{budget_id}**
+  - Update a budget
+  - Request: Budget update parameters
+  - Response: Updated budget details
+
+- **DELETE /api/finance/budgets/{budget_id}**
+  - Delete a budget (soft delete by default)
+  - Query Parameters: hard_delete (boolean)
+  - Response: Success status
+
+- **GET /api/finance/budgets/{budget_id}/performance**
+  - Get budget performance metrics
+  - Response: Budget performance with spending metrics, category performance, and projections
+
+- **POST /api/finance/budgets/{budget_id}/categories**
+  - Create a new budget category
+  - Request: Category creation parameters (name, description, allocated_amount)
+  - Response: Created category details
+
+- **PUT /api/finance/budgets/{budget_id}/categories/{category_id}**
+  - Update a budget category
+  - Request: Category update parameters
+  - Response: Updated category details
+
+- **DELETE /api/finance/budgets/{budget_id}/categories/{category_id}**
+  - Delete a budget category
+  - Query Parameters: hard_delete (boolean)
+  - Response: Success status
+
+- **POST /api/finance/transactions/link-to-budgets**
+  - Link existing transactions to budget categories based on category name matching
+  - Response: Number of transactions linked
+
 ### User Management
 
 #### User Operations
@@ -465,6 +548,13 @@ BusinessOS is an AI-first business management platform designed for small busine
   - Financial summary statistics (revenue, expenses, profit)
   - AI-powered financial insights
 - **Budgets**: Budget planning and tracking
+  - Budget creation with fiscal year, start/end dates, and total amount
+  - Budget category management with allocated amounts
+  - Budget performance tracking with spending metrics
+  - Budget vs. actual spending visualization
+  - Budget analysis with charts and projections
+  - Transaction linking to budget categories
+  - Budget status tracking (Draft, Active, Completed)
 - **Tax**: Tax calculation and reporting
 
 ## Development Guidelines

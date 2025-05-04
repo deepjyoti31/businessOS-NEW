@@ -33,6 +33,7 @@ export const ROUTES = {
   FINANCE_INVOICING: '/dashboard/finance/invoicing',
   FINANCE_REPORTS: '/dashboard/finance/reports',
   FINANCE_BUDGETING: '/dashboard/finance/budgeting',
+  FINANCE_BUDGET_ANALYSIS: '/dashboard/finance/budget-analysis',
   FINANCE_CLIENTS: '/dashboard/finance/clients',
   FINANCE_INVOICE_CREATE: '/dashboard/finance/invoices/create',
   FINANCE_INVOICE_EDIT: '/dashboard/finance/invoices/edit',

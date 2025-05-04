@@ -73,6 +73,18 @@ export interface BudgetFilter {
   search?: string;
 }
 
+export interface CategoryPerformance {
+  id: string;
+  name: string;
+  allocated_amount: number;
+  spent_amount: number;
+  remaining_amount: number;
+  spending_percentage: number;
+  status: string;
+  monthly_spending?: Record<string, number>;
+  trend?: string;
+}
+
 export interface BudgetPerformance {
   budget_id: string;
   total_budget: number;
@@ -81,15 +93,17 @@ export interface BudgetPerformance {
   remaining_budget: number;
   allocation_percentage: number;
   spending_percentage: number;
-  categories: Array<{
-    id: string;
-    name: string;
-    allocated_amount: number;
-    spent_amount: number;
-    remaining_amount: number;
-    spending_percentage: number;
-    status: string;
-  }>;
+  categories: CategoryPerformance[];
+  monthly_spending?: Record<string, number>;
+  monthly_trend?: string;
+  projected_end_status?: string;
+  last_updated?: string;
+}
+
+export interface BudgetCategoryUpdate {
+  name?: string;
+  description?: string;
+  allocated_amount?: number;
 }
 
 export class BudgetService {
@@ -318,6 +332,102 @@ export class BudgetService {
       return await response.json();
     } catch (error) {
       console.error(`Error fetching budget performance for ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new budget category.
+   */
+  public async createBudgetCategory(budgetId: string, category: BudgetCategoryCreate): Promise<BudgetCategory> {
+    try {
+      // Get the JWT token from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Make the API request
+      const response = await fetch(`${this.baseUrl}/${budgetId}/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(category),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to create budget category');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error creating budget category for budget ${budgetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing budget category.
+   */
+  public async updateBudgetCategory(budgetId: string, categoryId: string, category: BudgetCategoryUpdate): Promise<BudgetCategory> {
+    try {
+      // Get the JWT token from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Make the API request
+      const response = await fetch(`${this.baseUrl}/${budgetId}/categories/${categoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(category),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update budget category');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error updating budget category ${categoryId} for budget ${budgetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a budget category.
+   */
+  public async deleteBudgetCategory(budgetId: string, categoryId: string, hardDelete: boolean = false): Promise<void> {
+    try {
+      // Get the JWT token from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Make the API request
+      const response = await fetch(`${this.baseUrl}/${budgetId}/categories/${categoryId}?hard_delete=${hardDelete}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to delete budget category');
+      }
+    } catch (error) {
+      console.error(`Error deleting budget category ${categoryId} for budget ${budgetId}:`, error);
       throw error;
     }
   }

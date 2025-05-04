@@ -345,6 +345,14 @@ Sprint B3 (W17–18)
     - Client management UI (list, create, edit, delete) - COMPLETED
     - Invoice management UI (list, create, edit, view, mark as paid) - COMPLETED
     - Invoice summary statistics - COMPLETED
+  - Budget management functionality - COMPLETED
+    - Database schema for budgets, categories, and expenses - COMPLETED
+    - Backend API for budget and category management - COMPLETED
+    - Budget creation and management UI - COMPLETED
+    - Budget category management - COMPLETED
+    - Budget performance tracking and visualization - COMPLETED
+    - Budget analysis with charts and projections - COMPLETED
+    - Transaction linking to budget categories - COMPLETED
 • Invoice PDF generation and email delivery - PLANNED
 • Expense submission & approval - PLANNED
 • Project & Task CRUD + Kanban - PLANNED

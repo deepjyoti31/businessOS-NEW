@@ -4,16 +4,18 @@ Budget service for handling budget operations.
 
 import os
 import logging
-from typing import Dict, List, Optional, Any
-from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
+from calendar import month_name
+import statistics
 
 from supabase import create_client, Client
 
 from app.models.budget import (
     Budget, BudgetCreate, BudgetUpdate, BudgetFilter,
     BudgetCategory, BudgetCategoryCreate, BudgetCategoryUpdate,
-    BudgetPerformance
+    BudgetPerformance, CategoryPerformance
 )
 
 logger = logging.getLogger(__name__)
@@ -442,15 +444,32 @@ class BudgetService:
                 remaining_budget=budget.total_amount,
                 allocation_percentage=0,
                 spending_percentage=0,
-                categories=[]
+                categories=[],
+                last_updated=datetime.now()
             )
 
         # Calculate total allocated amount
         total_allocated = sum(category.allocated_amount for category in categories)
 
         # Get spending data for each category
-        category_performance = []
+        category_performance_list = []
         total_spent = 0
+
+        # Get budget start and end dates
+        start_date = budget.start_date
+        end_date = budget.end_date
+
+        # Calculate monthly spending for the budget
+        monthly_spending, monthly_trend = await self._calculate_monthly_spending(budget_id, start_date, end_date)
+
+        # Calculate projected end status
+        projected_end_status = self._calculate_projected_end_status(
+            budget.total_amount,
+            total_spent,
+            start_date,
+            end_date,
+            monthly_spending
+        )
 
         for category in categories:
             # Get expenses for this category
@@ -460,19 +479,31 @@ class BudgetService:
                 .eq("is_deleted", False) \
                 .execute()
 
-            category_spent = sum(expense["amount"] for expense in expenses_response.data) if expenses_response.data else 0
+            expenses = expenses_response.data if expenses_response.data else []
+            category_spent = sum(expense["amount"] for expense in expenses)
             total_spent += category_spent
 
+            # Calculate monthly spending for this category
+            category_monthly_spending, category_trend = self._calculate_category_monthly_spending(
+                expenses,
+                start_date,
+                end_date
+            )
+
             # Calculate category performance metrics
-            category_performance.append({
-                "id": str(category.id),
-                "name": category.name,
-                "allocated_amount": category.allocated_amount,
-                "spent_amount": category_spent,
-                "remaining_amount": category.allocated_amount - category_spent,
-                "spending_percentage": (category_spent / category.allocated_amount * 100) if category.allocated_amount > 0 else 0,
-                "status": self._get_budget_status(category_spent, category.allocated_amount)
-            })
+            category_performance = CategoryPerformance(
+                id=str(category.id),
+                name=category.name,
+                allocated_amount=category.allocated_amount,
+                spent_amount=category_spent,
+                remaining_amount=category.allocated_amount - category_spent,
+                spending_percentage=(category_spent / category.allocated_amount * 100) if category.allocated_amount > 0 else 0,
+                status=self._get_budget_status(category_spent, category.allocated_amount),
+                monthly_spending=category_monthly_spending,
+                trend=category_trend
+            )
+
+            category_performance_list.append(category_performance)
 
         # Calculate overall performance metrics
         remaining_budget = budget.total_amount - total_spent
@@ -487,8 +518,174 @@ class BudgetService:
             remaining_budget=remaining_budget,
             allocation_percentage=allocation_percentage,
             spending_percentage=spending_percentage,
-            categories=category_performance
+            categories=category_performance_list,
+            monthly_spending=monthly_spending,
+            monthly_trend=monthly_trend,
+            projected_end_status=projected_end_status,
+            last_updated=datetime.now()
         )
+
+    async def _calculate_monthly_spending(self, budget_id: str, start_date: datetime, end_date: datetime) -> Tuple[Dict[str, float], str]:
+        """
+        Calculate monthly spending for a budget.
+
+        Args:
+            budget_id: The ID of the budget
+            start_date: Budget start date
+            end_date: Budget end date
+
+        Returns:
+            Tuple of monthly spending dictionary and trend
+        """
+        # Get all expenses for this budget
+        expenses_response = self.supabase.table(self.expense_table) \
+            .select("*") \
+            .eq("is_deleted", False) \
+            .execute()
+
+        if not expenses_response.data:
+            return {}, "stable"
+
+        # Filter expenses that belong to this budget's categories
+        categories_response = self.supabase.table(self.category_table) \
+            .select("id") \
+            .eq("budget_id", budget_id) \
+            .eq("is_deleted", False) \
+            .execute()
+
+        if not categories_response.data:
+            return {}, "stable"
+
+        category_ids = [category["id"] for category in categories_response.data]
+
+        # Filter expenses by category
+        budget_expenses = [
+            expense for expense in expenses_response.data
+            if expense["budget_category_id"] in category_ids
+        ]
+
+        # Group expenses by month
+        monthly_spending = {}
+
+        # Initialize all months in the budget period
+        current_date = start_date.replace(day=1)
+        while current_date <= end_date:
+            month_key = current_date.strftime("%Y-%m")
+            month_name_key = current_date.strftime("%b %Y")
+            monthly_spending[month_name_key] = 0
+            current_date = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+        # Sum expenses by month
+        for expense in budget_expenses:
+            expense_date = datetime.fromisoformat(expense["date"].replace('Z', '+00:00'))
+            month_key = expense_date.strftime("%b %Y")
+            if month_key in monthly_spending:
+                monthly_spending[month_key] += expense["amount"]
+
+        # Determine trend
+        trend = "stable"
+        if len(monthly_spending) >= 3:
+            # Get the last three months with data
+            last_months = list(monthly_spending.items())[-3:]
+            values = [amount for _, amount in last_months if amount > 0]
+
+            if len(values) >= 2:
+                if all(values[i] < values[i+1] for i in range(len(values)-1)):
+                    trend = "increasing"
+                elif all(values[i] > values[i+1] for i in range(len(values)-1)):
+                    trend = "decreasing"
+
+        return monthly_spending, trend
+
+    def _calculate_category_monthly_spending(self, expenses: List[dict], start_date: datetime, end_date: datetime) -> Tuple[Dict[str, float], str]:
+        """
+        Calculate monthly spending for a category.
+
+        Args:
+            expenses: List of expenses
+            start_date: Budget start date
+            end_date: Budget end date
+
+        Returns:
+            Tuple of monthly spending dictionary and trend
+        """
+        # Group expenses by month
+        monthly_spending = {}
+
+        # Initialize all months in the budget period
+        current_date = start_date.replace(day=1)
+        while current_date <= end_date:
+            month_key = current_date.strftime("%Y-%m")
+            month_name_key = current_date.strftime("%b %Y")
+            monthly_spending[month_name_key] = 0
+            current_date = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+        # Sum expenses by month
+        for expense in expenses:
+            expense_date = datetime.fromisoformat(expense["date"].replace('Z', '+00:00'))
+            month_key = expense_date.strftime("%b %Y")
+            if month_key in monthly_spending:
+                monthly_spending[month_key] += expense["amount"]
+
+        # Determine trend
+        trend = "stable"
+        if len(monthly_spending) >= 3:
+            # Get the last three months with data
+            last_months = list(monthly_spending.items())[-3:]
+            values = [amount for _, amount in last_months if amount > 0]
+
+            if len(values) >= 2:
+                if all(values[i] < values[i+1] for i in range(len(values)-1)):
+                    trend = "increasing"
+                elif all(values[i] > values[i+1] for i in range(len(values)-1)):
+                    trend = "decreasing"
+
+        return monthly_spending, trend
+
+    def _calculate_projected_end_status(self, total_budget: float, current_spent: float, start_date: datetime, end_date: datetime, monthly_spending: Dict[str, float]) -> str:
+        """
+        Calculate projected end status based on current spending rate.
+
+        Args:
+            total_budget: Total budget amount
+            current_spent: Current spent amount
+            start_date: Budget start date
+            end_date: Budget end date
+            monthly_spending: Monthly spending dictionary
+
+        Returns:
+            Projected end status: "under_budget", "on_track", or "over_budget"
+        """
+        # If no spending yet, return on_track
+        if current_spent == 0:
+            return "on_track"
+
+        # Calculate total budget duration in days
+        total_days = (end_date - start_date).days
+        if total_days <= 0:
+            return "on_track"
+
+        # Calculate days elapsed
+        days_elapsed = (datetime.now() - start_date).days
+        if days_elapsed <= 0:
+            return "on_track"
+
+        # Calculate ideal spending rate (amount per day)
+        ideal_rate = total_budget / total_days
+
+        # Calculate actual spending rate
+        actual_rate = current_spent / days_elapsed
+
+        # Calculate projected final spending
+        projected_final = actual_rate * total_days
+
+        # Determine status based on projected final spending
+        if projected_final > total_budget * 1.1:  # 10% over budget
+            return "over_budget"
+        elif projected_final < total_budget * 0.9:  # 10% under budget
+            return "under_budget"
+        else:
+            return "on_track"
 
     def _get_budget_status(self, spent: float, allocated: float) -> str:
         """
