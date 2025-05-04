@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect, useRef } fro
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase, User, Session } from "@/config/supabaseClient";
+import { RoutePersistenceService } from "@/services/RoutePersistenceService";
 
 interface AuthUser {
   id: string;
@@ -59,7 +60,11 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'hidden') {
         // When the browser is minimized, store the current path
         lastPathRef.current = location.pathname;
-        localStorage.setItem('businessos-last-path', location.pathname);
+
+        // Use the RoutePersistenceService to store the path
+        if (!RoutePersistenceService.isPublicRoute(location.pathname)) {
+          RoutePersistenceService.saveRoute(location.pathname);
+        }
       } else if (document.visibilityState === 'visible') {
         // When the browser is restored, set the visibility change flag
         // This will completely block any navigation attempts
@@ -71,8 +76,9 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         }, 5000);
 
         // Force the current path to stay the same using history API
-        if (lastPathRef.current && lastPathRef.current !== window.location.pathname) {
-          window.history.replaceState(null, '', lastPathRef.current);
+        const storedRoute = RoutePersistenceService.getStoredRoute();
+        if (storedRoute && storedRoute !== window.location.pathname) {
+          window.history.replaceState(null, '', storedRoute);
         }
       }
     };
@@ -101,8 +107,9 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Restore the last path if it exists
-        const storedPath = localStorage.getItem('businessos-last-path');
+        // Restore the last path if it exists using RoutePersistenceService
+        // Only get routes that were saved during a reload
+        const storedPath = RoutePersistenceService.getStoredRoute(true);
         if (storedPath) {
           lastPathRef.current = storedPath;
         }
@@ -177,22 +184,25 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
             console.error("Failed to store user data:", storageError);
           }
 
-          // Only navigate and show toast on explicit sign-in (not INITIAL_SESSION),
-          // and never during visibility changes
+          // Only show toast on explicit sign-in (not INITIAL_SESSION),
+          // but don't navigate - let RouterInitializer handle that
           if (event === 'SIGNED_IN' && !isVisibilityEvent) {
             toast.success("Login successful!");
-            navigate('/dashboard');
+            // Navigation is now handled by RouterInitializer
           }
         } else {
           // Always update the user state
           setUser(null);
           localStorage.removeItem(AUTH_STORAGE_KEY);
 
-          // Only navigate and show toast on explicit sign-out,
-          // and never during visibility changes
+          // Only show toast on explicit sign-out,
+          // but don't navigate - let RouterInitializer handle that
           if (event === 'SIGNED_OUT' && !isVisibilityEvent) {
             toast.info("You have been logged out.");
-            navigate('/login');
+            // Navigation is now handled by RouterInitializer
+
+            // Clear stored route on logout
+            RoutePersistenceService.clearStoredRoute();
           }
         }
       }
@@ -207,12 +217,12 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     };
   }, [navigate]);
 
-  // Handle route protection
+  // Handle route protection - simplified as RouterInitializer now handles most navigation
   useEffect(() => {
     // Completely skip route protection during visibility changes
     if (isVisibilityChangeRef.current) {
       // Force the current path to stay the same using history API
-      const storedPath = lastPathRef.current;
+      const storedPath = RoutePersistenceService.getStoredRoute() || lastPathRef.current;
       if (storedPath && storedPath !== window.location.pathname) {
         // Use history API directly to avoid React Router's navigation
         window.history.replaceState(null, '', storedPath);
@@ -221,25 +231,20 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!isLoading) {
-      const publicPaths = ['/login', '/register', '/forgot-password', '/'];
-      const isPublicPath = publicPaths.includes(location.pathname);
+      const isPublicPath = RoutePersistenceService.isPublicRoute(location.pathname);
 
       // Store the current path for authenticated users on non-public paths
+      // But don't use the reload-specific method as this is normal navigation
       if (user && !isPublicPath) {
         lastPathRef.current = location.pathname;
-        localStorage.setItem('businessos-last-path', location.pathname);
+        // Don't save route during normal navigation to prevent interfering with user navigation
+        // RoutePersistenceService.saveRoute(location.pathname);
       }
 
-      // Normal authentication flow (only when not during visibility change)
+      // Basic protection for unauthenticated users trying to access protected routes
+      // RouterInitializer handles the rest of the navigation logic
       if (!user && !isPublicPath) {
         navigate('/login', { replace: true });
-      } else if (user && isPublicPath && location.pathname !== '/') {
-        // If we have a stored path from a previous session, use that instead of dashboard
-        if (lastPathRef.current && lastPathRef.current !== '/' && lastPathRef.current !== '/login') {
-          navigate(lastPathRef.current, { replace: true });
-        } else {
-          navigate('/dashboard', { replace: true });
-        }
       }
     }
   }, [user, isLoading, location.pathname, navigate]);
@@ -313,6 +318,9 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       // Clear local state
       setUser(null);
       localStorage.removeItem(AUTH_STORAGE_KEY);
+
+      // Clear stored route
+      RoutePersistenceService.clearStoredRoute();
     } catch (error: any) {
       console.error("Logout error:", error);
       toast.error("Logout failed. Please try again.");

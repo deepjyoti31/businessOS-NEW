@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SupabaseAuthProvider } from "./contexts/SupabaseAuthContext";
 import VisibilityProtection from "./components/VisibilityProtection";
+import RouterInitializer from "./components/RouterInitializer";
+import NavigationGuard from "./components/NavigationGuard";
 
 // Layouts
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -100,6 +102,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <VisibilityProtection />
+          <RouterInitializer />
+          <NavigationGuard />
           <Routes>
               {/* Root route */}
               <Route path="/" element={<Index />} />

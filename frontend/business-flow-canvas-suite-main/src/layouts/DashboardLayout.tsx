@@ -6,6 +6,7 @@ import TopNav from "@/components/dashboard/TopNav";
 import EnhancedAiAssistant from "@/components/dashboard/EnhancedAiAssistant";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useVisibilityProtection } from "@/hooks/use-visibility-protection";
+import { usePageReloadDetection } from "@/hooks/use-page-reload-detection";
 import TeamCollaboration from "@/components/dashboard/TeamCollaboration";
 
 const DashboardLayout = () => {
@@ -14,6 +15,9 @@ const DashboardLayout = () => {
 
   // Use the visibility protection hook to prevent unwanted navigation
   useVisibilityProtection();
+
+  // Use page reload detection
+  const isPageReload = usePageReloadDetection();
 
   // Auto-collapse sidebar on mobile
   useEffect(() => {

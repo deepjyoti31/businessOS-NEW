@@ -2,6 +2,7 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/SupabaseAuthContext";
+import { RoutePersistenceService } from "@/services/RoutePersistenceService";
 
 /**
  * Index page that handles initial redirection based on authentication status
@@ -13,7 +14,12 @@ const Index = () => {
   // Use useEffect to handle navigation instead of relying on the render cycle
   useEffect(() => {
     if (!isLoading) {
-      const destination = isAuthenticated ? "/dashboard" : "/login";
+      // Check for a stored route if the user is authenticated
+      const storedRoute = RoutePersistenceService.getStoredRoute();
+      const destination = isAuthenticated
+        ? (storedRoute || "/dashboard")
+        : "/login";
+
       console.log(`Index component useEffect redirecting to: ${destination}`);
       navigate(destination, { replace: true });
     }
