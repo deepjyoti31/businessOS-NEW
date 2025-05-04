@@ -4,11 +4,13 @@ Finance module API routes.
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from app.models.finance import Transaction, TransactionCreate, TransactionUpdate, TransactionFilter, TransactionSummary
+from app.models.reports import ReportPeriod, FinancialReportResponse
 from app.services.transaction_service import TransactionService
+from app.services.report_service import ReportService
 from app.utils.auth import get_user_id
 
 router = APIRouter(
@@ -16,9 +18,12 @@ router = APIRouter(
     tags=["finance"],
 )
 
-# Dependency
+# Dependencies
 async def get_transaction_service():
     return TransactionService()
+
+async def get_report_service():
+    return ReportService()
 
 # Transaction Endpoints
 @router.get("/transactions/summary", response_model=TransactionSummary)
@@ -144,3 +149,89 @@ async def delete_transaction(
     if not success:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {"message": "Transaction deleted successfully"}
+
+# Report Endpoints
+@router.get("/reports", response_model=FinancialReportResponse)
+async def get_financial_report(
+    report_type: str = Query("monthly", regex="^(monthly|quarterly|expense_breakdown|all)$"),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    report_service: ReportService = Depends(get_report_service),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Generate a financial report based on the specified type and period.
+
+    - report_type: Type of report to generate (monthly, quarterly, expense_breakdown, all)
+    - start_date: Start date for the report period (defaults to 6 months ago)
+    - end_date: End date for the report period (defaults to current date)
+    """
+    # Set default period if not provided (last 6 months)
+    if not end_date:
+        end_date = datetime.now()
+    if not start_date:
+        start_date = end_date - timedelta(days=180)  # Approximately 6 months
+
+    period = ReportPeriod(start_date=start_date, end_date=end_date)
+
+    return await report_service.generate_financial_report(user_id, period, report_type)
+
+@router.get("/reports/monthly", response_model=FinancialReportResponse)
+async def get_monthly_report(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    report_service: ReportService = Depends(get_report_service),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Generate a monthly financial report for the specified period.
+    """
+    # Set default period if not provided (last 6 months)
+    if not end_date:
+        end_date = datetime.now()
+    if not start_date:
+        start_date = end_date - timedelta(days=180)  # Approximately 6 months
+
+    period = ReportPeriod(start_date=start_date, end_date=end_date)
+
+    return await report_service.generate_financial_report(user_id, period, "monthly")
+
+@router.get("/reports/quarterly", response_model=FinancialReportResponse)
+async def get_quarterly_report(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    report_service: ReportService = Depends(get_report_service),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Generate a quarterly financial report for the specified period.
+    """
+    # Set default period if not provided (last 12 months)
+    if not end_date:
+        end_date = datetime.now()
+    if not start_date:
+        start_date = end_date - timedelta(days=365)  # Last year
+
+    period = ReportPeriod(start_date=start_date, end_date=end_date)
+
+    return await report_service.generate_financial_report(user_id, period, "quarterly")
+
+@router.get("/reports/expense-breakdown", response_model=FinancialReportResponse)
+async def get_expense_breakdown(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    report_service: ReportService = Depends(get_report_service),
+    user_id: str = Depends(get_user_id)
+):
+    """
+    Generate an expense breakdown report for the specified period.
+    """
+    # Set default period if not provided (last 3 months)
+    if not end_date:
+        end_date = datetime.now()
+    if not start_date:
+        start_date = end_date - timedelta(days=90)  # Last 3 months
+
+    period = ReportPeriod(start_date=start_date, end_date=end_date)
+
+    return await report_service.generate_financial_report(user_id, period, "expense_breakdown")
