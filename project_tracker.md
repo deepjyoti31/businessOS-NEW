@@ -334,6 +334,10 @@ Sprint B2 (W15–16)
 • Hook AI pipeline (summary + tags)
 Sprint B3 (W17–18)
 • Semantic search UI/API
+• Finance module implementation - IN PROGRESS
+  - Transaction management (create, read, update, delete)
+  - Transaction filtering, sorting, and categorization
+  - Transaction summary statistics
 • Invoice builder + PDF/email
 • Expense submission & approval
 • Project & Task CRUD + Kanban

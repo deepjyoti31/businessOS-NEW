@@ -96,6 +96,20 @@ BusinessOS is an AI-first business management platform designed for small busine
   - embedding (vector)
   - created_at (timestamp)
 
+#### Finance Management
+- **transactions**: Financial transactions
+  - id (UUID)
+  - user_id (UUID, references auth.users.id)
+  - date (timestamp)
+  - type (string, 'Income' or 'Expense')
+  - description (string)
+  - amount (decimal)
+  - category (string, nullable)
+  - reference (string, nullable)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
 #### Administration
 - **roles**: User roles
   - id (UUID)
@@ -192,6 +206,44 @@ BusinessOS is an AI-first business management platform designed for small busine
   - Generate document content
   - Request: Content generation parameters
   - Response: Generated content
+
+### Finance Management
+
+#### Transaction Operations
+- **GET /api/finance/transactions**
+  - Get all transactions with optional filtering, pagination, and sorting
+  - Query Parameters: page, page_size, sort_by, sort_order, start_date, end_date, type, category, min_amount, max_amount, search
+  - Response: List of transactions
+
+- **GET /api/finance/transactions/{transaction_id}**
+  - Get a specific transaction by ID
+  - Response: Transaction details
+
+- **POST /api/finance/transactions**
+  - Create a new transaction
+  - Request: Transaction creation parameters (date, type, description, amount, category, reference)
+  - Response: Created transaction details
+
+- **PUT /api/finance/transactions/{transaction_id}**
+  - Update a transaction
+  - Request: Transaction update parameters
+  - Response: Updated transaction details
+
+- **DELETE /api/finance/transactions/{transaction_id}**
+  - Delete a transaction (soft delete by default)
+  - Query Parameters: hard_delete (boolean)
+  - Response: Success status
+
+#### Transaction Summary
+- **GET /api/finance/transactions/summary**
+  - Get summary statistics for transactions
+  - Query Parameters: start_date, end_date, type, category
+  - Response: Transaction summary with total income, total expenses, net amount, transaction count, and categories
+
+#### Transaction Categories
+- **GET /api/finance/transactions/categories**
+  - Get all unique transaction categories
+  - Response: List of categories
 
 ### User Management
 
@@ -326,6 +378,15 @@ BusinessOS is an AI-first business management platform designed for small busine
 - **Templates**: Document templates
 - **Archive**: Archived documents
 - **File Details**: Detailed view of a specific file
+
+### Finance Module Pages
+- **Dashboard**: Overview of financial metrics and quick access to finance features
+- **Transactions**: Transaction management with filtering, sorting, and categorization
+- **Invoices**: Invoice creation, management, and tracking
+- **Expenses**: Expense tracking and approval workflow
+- **Reports**: Financial reports and analytics
+- **Budgets**: Budget planning and tracking
+- **Tax**: Tax calculation and reporting
 
 ## Development Guidelines
 
