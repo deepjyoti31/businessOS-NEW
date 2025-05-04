@@ -427,6 +427,7 @@ BusinessOS is an AI-first business management platform designed for small busine
 - **React Router**: For client-side routing
 - **Protected Routes**: Require authentication
 - **Role-based Routes**: Require specific roles
+- **Route Persistence**: Maintains current route during page reloads
 
 ### Performance Optimization
 - **Code Splitting**: Lazy loading of components
@@ -450,6 +451,36 @@ BusinessOS is an AI-first business management platform designed for small busine
 - AZURE_OPENAI_EMBEDDING_MODEL: Azure OpenAI embedding model name
 - AZURE_OPENAI_COMPLETION_MODEL: Azure OpenAI completion model name
 - CORS_ORIGINS: Allowed origins for CORS
+
+## Route Persistence Implementation
+
+### Overview
+The route persistence system ensures that users remain on their current page when refreshing the browser, providing a seamless user experience. This implementation follows industry best practices by separating authentication from navigation logic.
+
+### Components
+- **RoutePersistenceService**: Core service that manages route storage and retrieval
+  - Stores routes in localStorage with special flags for page reloads
+  - Provides methods to save, retrieve, and clear routes
+  - Distinguishes between public and protected routes
+
+- **NavigationGuard**: Component that preserves routes during navigation
+  - Listens for beforeunload events to save the current route before page refresh
+  - Uses a ref to track the current path without triggering re-renders
+
+- **RouterInitializer**: Component that handles initial routing decisions
+  - Detects page reloads using session storage flags
+  - Restores the previous route after authentication
+  - Prevents unwanted redirects during normal navigation
+
+- **PageReloadDetection**: Hook that detects actual page reloads vs normal navigation
+  - Uses session storage to track browser sessions
+  - Provides a flag indicating when a page has been reloaded
+
+### Implementation Details
+- Routes are only saved during actual page reloads, not during normal navigation
+- Special flags in sessionStorage distinguish between reloads and normal navigation
+- The system respects authentication state while preserving navigation context
+- Public routes (login, register, etc.) are excluded from persistence
 
 ## Known Issues and Solutions
 

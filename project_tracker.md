@@ -283,7 +283,8 @@ Core Admin & Security
 • User CRUD + activate/deactivate
 • Roles: Admin/User
 • Company profile & timezone selector
-User stories: onboard users, assign roles; edit own profile/password
+• Route persistence for seamless page reloads
+User stories: onboard users, assign roles; edit own profile/password; maintain context during page refreshes
 
 Document Management & Collaboration
 • Folder CRUD
@@ -325,6 +326,7 @@ Sprint B1 (W13–14)
 • Setup repo, env, CI/CD
 • Supabase Auth + core Admin UI + profiles/roles
 • Company profile & settings
+• Route persistence implementation for seamless page reloads
 Sprint B2 (W15–16)
 • Folder & file CRUD UI/API
 • Preview integration
