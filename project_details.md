@@ -245,6 +245,27 @@ BusinessOS is an AI-first business management platform designed for small busine
   - Get all unique transaction categories
   - Response: List of categories
 
+#### Financial Reports
+- **GET /api/finance/reports**
+  - Generate a financial report based on the specified type and period
+  - Query Parameters: report_type (monthly, quarterly, expense_breakdown, all), start_date, end_date
+  - Response: Financial report with summary, monthly data, quarterly data, expense data, and AI insights
+
+- **GET /api/finance/reports/monthly**
+  - Generate a monthly financial report
+  - Query Parameters: start_date, end_date
+  - Response: Monthly financial report with summary and monthly data
+
+- **GET /api/finance/reports/quarterly**
+  - Generate a quarterly financial report
+  - Query Parameters: start_date, end_date
+  - Response: Quarterly financial report with summary and quarterly data
+
+- **GET /api/finance/reports/expense-breakdown**
+  - Generate an expense breakdown report
+  - Query Parameters: start_date, end_date
+  - Response: Expense breakdown report with summary and expense category data
+
 ### User Management
 
 #### User Operations
@@ -385,6 +406,11 @@ BusinessOS is an AI-first business management platform designed for small busine
 - **Invoices**: Invoice creation, management, and tracking
 - **Expenses**: Expense tracking and approval workflow
 - **Reports**: Financial reports and analytics
+  - Monthly financial performance reports with bar and line charts
+  - Quarterly financial performance reports with bar charts
+  - Expense breakdown reports with pie charts
+  - Financial summary statistics (revenue, expenses, profit)
+  - AI-powered financial insights
 - **Budgets**: Budget planning and tracking
 - **Tax**: Tax calculation and reporting
 
