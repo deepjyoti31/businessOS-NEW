@@ -67,6 +67,52 @@ BusinessOS is an AI-first business management platform designed for small busine
   - created_at
   - updated_at
 
+#### Finance Module
+- **clients**: Client information for invoicing
+  - id (UUID)
+  - user_id (references auth.users.id)
+  - name
+  - contact_name
+  - email
+  - phone
+  - address
+  - city
+  - state
+  - zip
+  - country
+  - created_at
+  - updated_at
+  - is_deleted
+
+- **invoices**: Invoice information
+  - id (UUID)
+  - user_id (references auth.users.id)
+  - client_id (references clients.id)
+  - invoice_number
+  - date
+  - due_date
+  - status (Draft, Sent, Paid, Overdue)
+  - subtotal
+  - tax_rate
+  - tax_amount
+  - total
+  - notes
+  - terms
+  - pdf_url
+  - created_at
+  - updated_at
+  - is_deleted
+
+- **invoice_items**: Line items for invoices
+  - id (UUID)
+  - invoice_id (references invoices.id)
+  - description
+  - quantity
+  - unit_price
+  - amount
+  - created_at
+  - updated_at
+
 #### Document Management
 - **files**: Document metadata
   - id (UUID)
@@ -404,6 +450,13 @@ BusinessOS is an AI-first business management platform designed for small busine
 - **Dashboard**: Overview of financial metrics and quick access to finance features
 - **Transactions**: Transaction management with filtering, sorting, and categorization
 - **Invoices**: Invoice creation, management, and tracking
+  - Client management (create, edit, delete clients)
+  - Invoice creation with line items, tax calculation, and total
+  - Invoice editing and viewing
+  - Invoice status tracking (Draft, Sent, Paid, Overdue)
+  - Mark invoices as paid
+  - Invoice summary statistics (total invoiced, outstanding, overdue, paid)
+  - PDF preview and email delivery (planned)
 - **Expenses**: Expense tracking and approval workflow
 - **Reports**: Financial reports and analytics
   - Monthly financial performance reports with bar and line charts

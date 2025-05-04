@@ -69,6 +69,10 @@ import FinanceTransactions from "./pages/modules/finance/Transactions";
 import FinanceReports from "./pages/modules/finance/Reports";
 import FinanceInvoicing from "./pages/modules/finance/Invoicing";
 import FinanceBudgeting from "./pages/modules/finance/Budgeting";
+import FinanceClients from "./pages/modules/finance/Clients";
+import InvoiceCreate from "./pages/modules/finance/InvoiceCreate";
+import InvoiceEdit from "./pages/modules/finance/InvoiceEdit";
+import InvoiceDetails from "./pages/modules/finance/InvoiceDetails";
 
 // HR Subpages
 import HRDashboard from "./pages/modules/hr/Dashboard";
@@ -147,6 +151,10 @@ const App = () => (
                 <Route path="reports" element={<FinanceReports />} />
                 <Route path="invoicing" element={<FinanceInvoicing />} />
                 <Route path="budgeting" element={<FinanceBudgeting />} />
+                <Route path="clients" element={<FinanceClients />} />
+                <Route path="invoices/create" element={<InvoiceCreate />} />
+                <Route path="invoices/edit/:id" element={<InvoiceEdit />} />
+                <Route path="invoices/:id" element={<InvoiceDetails />} />
               </Route>
 
               {/* HR Module with Subpages */}

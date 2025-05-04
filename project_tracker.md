@@ -339,9 +339,15 @@ Sprint B3 (W17–18)
   - Transaction filtering, sorting, and categorization - COMPLETED
   - Transaction summary statistics - COMPLETED
   - Financial reports and analytics - COMPLETED
-• Invoice builder + PDF/email
-• Expense submission & approval
-• Project & Task CRUD + Kanban
+  - Invoicing functionality - COMPLETED
+    - Database schema for clients, invoices, and invoice items - COMPLETED
+    - Backend API for invoice and client management - COMPLETED
+    - Client management UI (list, create, edit, delete) - COMPLETED
+    - Invoice management UI (list, create, edit, view, mark as paid) - COMPLETED
+    - Invoice summary statistics - COMPLETED
+• Invoice PDF generation and email delivery - PLANNED
+• Expense submission & approval - PLANNED
+• Project & Task CRUD + Kanban - PLANNED
 • Notification integration
 • Internal QA & beta rollout
 

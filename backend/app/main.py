@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from app.routers import documents, admin, roles, permissions, company, settings, finance
+from app.routers import documents, admin, roles, permissions, company, settings, finance, clients, invoices
 
 # Create FastAPI app
 app = FastAPI(
@@ -39,6 +39,8 @@ app.include_router(permissions.router)
 app.include_router(company.router)
 app.include_router(settings.router)
 app.include_router(finance.router, prefix="/api", tags=["finance"])
+app.include_router(clients.router, prefix="/api", tags=["clients"])
+app.include_router(invoices.router, prefix="/api", tags=["invoices"])
 
 @app.get("/")
 async def root():
