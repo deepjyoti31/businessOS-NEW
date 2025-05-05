@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/SupabaseAuthContext";
 import { RoutePersistenceService } from "@/services/RoutePersistenceService";
+import { ROUTES } from "@/config/constants";
 
 /**
  * Index page that handles initial redirection based on authentication status

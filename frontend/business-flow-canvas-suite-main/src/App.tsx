@@ -97,6 +97,7 @@ import MarketingCampaigns from "./pages/modules/marketing/Campaigns";
 // Other Pages
 import NotFound from "./pages/NotFound";
 import Index from "./pages/Index";
+import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
 
@@ -112,7 +113,8 @@ const App = () => (
           <NavigationGuard />
           <Routes>
               {/* Root route */}
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/app" element={<Index />} />
 
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />

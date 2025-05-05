@@ -281,7 +281,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         options: {
           data: {
             name,
-            role: "User" // Default role for new users
+            role: "Admin" // Set default role to Admin for new users
           }
         }
       });
@@ -296,6 +296,10 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       if (data.user && !data.user.confirmed_at) {
         toast.info("Please check your email to confirm your account.");
         navigate('/login');
+      } else {
+        // If email confirmation is not required, redirect to company setup
+        toast.success("Registration successful! Please set up your company profile.");
+        navigate('/dashboard/administration/company');
       }
     } catch (error: any) {
       setIsLoading(false);

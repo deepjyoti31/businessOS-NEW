@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings,
   Users,
@@ -9,40 +9,145 @@ import {
   Calendar,
   FolderClosed,
   PackageCheck,
-  Database
+  Database,
+  Loader2
 } from "lucide-react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import ModuleCard from "@/components/dashboard/ModuleCard";
 import CalendarView from "@/components/dashboard/CalendarView";
+import { useToast } from "@/components/ui/use-toast";
+import { TransactionService } from "@/services/TransactionService";
+import HRService from "@/services/HRService";
+import { documentService } from "@/services/documentServiceInstances";
+import { formatCurrency } from "@/lib/utils";
 
 const Dashboard = () => {
-  // Mock data for dashboard
-  const kpis = [
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [kpis, setKpis] = useState([
     {
       title: "Total Revenue",
-      value: "$125,430.00",
-      change: { value: 12.5, percentage: true },
-      trend: "up" as const,
+      value: "Loading...",
+      change: { value: 0, percentage: true },
+      trend: "neutral" as const,
     },
     {
-      title: "Active Projects",
-      value: "15",
-      change: { value: 3, percentage: false },
-      trend: "up" as const,
+      title: "Total Employees",
+      value: "Loading...",
+      change: { value: 0, percentage: false },
+      trend: "neutral" as const,
     },
     {
-      title: "Open Tickets",
-      value: "38",
-      change: { value: -5, percentage: false },
-      trend: "down" as const,
+      title: "Documents",
+      value: "Loading...",
+      change: { value: 0, percentage: false },
+      trend: "neutral" as const,
     },
     {
-      title: "New Leads",
-      value: "27",
-      change: { value: 8.3, percentage: true },
-      trend: "up" as const,
+      title: "Departments",
+      value: "Loading...",
+      change: { value: 0, percentage: false },
+      trend: "neutral" as const,
     },
-  ];
+  ]);
+
+  // Fetch real data for the dashboard
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+      try {
+        // Create an array to hold our KPI data
+        const kpiData = [...kpis];
+
+        // Fetch financial data
+        try {
+          const transactionService = TransactionService.getInstance();
+          const summary = await transactionService.getTransactionSummary();
+
+          if (summary) {
+            kpiData[0] = {
+              title: "Total Revenue",
+              value: formatCurrency(summary.total_income || 0),
+              change: {
+                value: summary.income_change || 0,
+                percentage: true
+              },
+              trend: (summary.income_change || 0) >= 0 ? "up" : "down" as const,
+            };
+          }
+        } catch (error) {
+          console.error("Error fetching financial data:", error);
+        }
+
+        // Fetch HR data
+        try {
+          const employeesResponse = await HRService.getEmployees(1, 100);
+          const departmentsData = await HRService.getDepartments();
+
+          if (employeesResponse) {
+            kpiData[1] = {
+              title: "Total Employees",
+              value: employeesResponse.pagination.total_count.toString(),
+              change: {
+                value: employeesResponse.items.filter(emp =>
+                  new Date(emp.hire_date) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+                ).length,
+                percentage: false
+              },
+              trend: "up" as const,
+            };
+          }
+
+          if (departmentsData) {
+            kpiData[3] = {
+              title: "Departments",
+              value: departmentsData.length.toString(),
+              change: { value: 0, percentage: false },
+              trend: "neutral" as const,
+            };
+          }
+        } catch (error) {
+          console.error("Error fetching HR data:", error);
+        }
+
+        // Fetch document data
+        try {
+          const allFiles = await documentService.getAllFiles();
+
+          if (allFiles) {
+            const documentCount = allFiles.filter(file => !file.isFolder).length;
+            const processedCount = allFiles.filter(file => !file.isFolder && file.processing_status === 'completed').length;
+
+            kpiData[2] = {
+              title: "Documents",
+              value: documentCount.toString(),
+              change: {
+                value: processedCount,
+                percentage: false
+              },
+              trend: "up" as const,
+            };
+          }
+        } catch (error) {
+          console.error("Error fetching document data:", error);
+        }
+
+        // Update KPIs with real data
+        setKpis(kpiData);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [toast]);
 
   const modules = [
     {
@@ -107,43 +212,72 @@ const Dashboard = () => {
     },
   ];
 
-  const activities = [
-    {
-      id: 1,
-      type: "task",
-      title: "New task assigned: Update sales dashboard",
-      time: "10 minutes ago",
-      user: "Jane Cooper",
-    },
-    {
-      id: 2,
-      type: "comment",
-      title: "Comment on Project X: Let's schedule a meeting",
-      time: "1 hour ago",
-      user: "Wade Warren",
-    },
-    {
-      id: 3,
-      type: "file",
-      title: "New file uploaded: Q3 Financial Report.pdf",
-      time: "3 hours ago",
-      user: "Esther Howard",
-    },
-    {
-      id: 4,
-      type: "sale",
-      title: "New deal closed with Acme Corp: $12,500",
-      time: "Yesterday",
-      user: "Cameron Williamson",
-    },
-    {
-      id: 5,
-      type: "meeting",
-      title: "Team meeting scheduled for tomorrow at 10:00 AM",
-      time: "Yesterday",
-      user: "Brooklyn Simmons",
-    },
-  ];
+  const [activities, setActivities] = useState<any[]>([]);
+  const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
+
+  // Fetch recent activities
+  useEffect(() => {
+    const fetchRecentActivities = async () => {
+      setIsActivitiesLoading(true);
+      try {
+        const AuditLogService = (await import('@/services/AuditLogService')).default;
+        const auditLogService = AuditLogService.getInstance();
+        const recentLogs = await auditLogService.getRecentActivity(5);
+
+        // Transform audit logs to activity format
+        const transformedActivities = recentLogs.map(log => {
+          // Determine activity type based on category and action
+          let type = "task";
+          if (log.category === "DOCUMENT_MANAGEMENT") type = "file";
+          else if (log.category === "FINANCE") type = "sale";
+          else if (log.category === "USER_MANAGEMENT") type = "user";
+          else if (log.category === "SYSTEM") type = "system";
+
+          // Format the title based on action and details
+          let title = log.action;
+          if (log.details && log.details.message) {
+            title = log.details.message;
+          }
+
+          // Format the time
+          const logTime = new Date(log.created_at);
+          const now = new Date();
+          const diffMs = now.getTime() - logTime.getTime();
+          const diffMins = Math.round(diffMs / 60000);
+          const diffHours = Math.round(diffMs / 3600000);
+          const diffDays = Math.round(diffMs / 86400000);
+
+          let time = "";
+          if (diffMins < 60) {
+            time = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+          } else if (diffHours < 24) {
+            time = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+          } else {
+            time = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+          }
+
+          return {
+            id: log.id,
+            type,
+            title,
+            time,
+            user: log.email || "System",
+            category: log.category,
+            severity: log.severity
+          };
+        });
+
+        setActivities(transformedActivities);
+      } catch (error) {
+        console.error("Error fetching recent activities:", error);
+        setActivities([]);
+      } finally {
+        setIsActivitiesLoading(false);
+      }
+    };
+
+    fetchRecentActivities();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -182,119 +316,137 @@ const Dashboard = () => {
             </button>
           </div>
           <div className="bg-card rounded-lg border shadow-sm">
-            <div className="divide-y divide-border">
-              {activities.map((activity) => (
-                <div key={activity.id} className="p-4 flex items-start gap-4">
-                  <div className="bg-business-50 rounded-full p-2">
-                    {activity.type === "task" ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-business-600"
-                      >
-                        <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
-                        <path d="m9 12 2 2 4-4" />
-                      </svg>
-                    ) : activity.type === "comment" ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-business-600"
-                      >
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    ) : activity.type === "file" ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-business-600"
-                      >
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                        <polyline points="10 9 9 9 8 9" />
-                      </svg>
-                    ) : activity.type === "sale" ? (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-business-600"
-                      >
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                      </svg>
-                    ) : (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-business-600"
-                      >
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    )}
+            {isActivitiesLoading ? (
+              <div className="p-8 flex justify-center items-center">
+                <Loader2 className="h-6 w-6 animate-spin text-business-600" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading activity data...</span>
+              </div>
+            ) : activities.length > 0 ? (
+              <div className="divide-y divide-border">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="p-4 flex items-start gap-4">
+                    <div className="bg-business-50 rounded-full p-2">
+                      {activity.type === "task" ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-business-600"
+                        >
+                          <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                      ) : activity.type === "user" ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-business-600"
+                        >
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      ) : activity.type === "file" ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-business-600"
+                        >
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                          <line x1="16" y1="17" x2="8" y2="17" />
+                          <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                      ) : activity.type === "sale" ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-business-600"
+                        >
+                          <line x1="12" y1="1" x2="12" y2="23" />
+                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                      ) : (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-business-600"
+                        >
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-card-foreground">
+                        {activity.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {activity.time} by {activity.user}
+                      </p>
+                      {activity.category && (
+                        <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">
+                          {activity.category}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-card-foreground">
-                      {activity.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {activity.time} by {activity.user}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground">
+                <p>No recent activity found.</p>
+                <p className="text-sm mt-1">Activity will appear here as you use the system.</p>
+              </div>
+            )}
           </div>
-          
+
           {/* AI Insights */}
           <div className="space-y-4">
             <h2 className="text-lg font-medium">AI Insights</h2>
             <div className="bg-card rounded-lg border shadow-sm p-4">
               <div className="mb-4 flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full bg-business-100 border border-business-300 flex items-center justify-center">
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    width="16" 
-                    height="16" 
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -313,22 +465,43 @@ const Dashboard = () => {
                     <path d="M11 3H9"></path>
                   </svg>
                 </div>
-                <h3 className="text-base font-medium">Business Optimizer</h3>
+                <h3 className="text-base font-medium">Business Insights</h3>
               </div>
 
               <div className="space-y-4">
-                <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
-                  <span className="block font-medium mb-1 text-business-700">Cash Flow Optimization</span>
-                  <span>Based on current trends, optimizing payment terms could improve your cash flow by 15%.</span>
-                </div>
-                <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
-                  <span className="block font-medium mb-1 text-business-700">Sales Performance</span>
-                  <span>Your sales team is 24% more effective on Tuesdays and Wednesdays. Consider scheduling more client calls on these days.</span>
-                </div>
-                <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
-                  <span className="block font-medium mb-1 text-business-700">Inventory Alert</span>
-                  <span>Product SKU-1242 is projected to run out of stock in 2 weeks based on current sales velocity.</span>
-                </div>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-business-600" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading insights...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
+                      <span className="block font-medium mb-1 text-business-700">System Setup</span>
+                      <span>
+                        {kpis[1].value !== "Loading..." && parseInt(kpis[1].value) > 0
+                          ? `You have ${kpis[1].value} employees in the system. Consider setting up departments and roles for better organization.`
+                          : "Welcome to BusinessOS! Start by adding employees and setting up your company profile."}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
+                      <span className="block font-medium mb-1 text-business-700">Document Management</span>
+                      <span>
+                        {kpis[2].value !== "Loading..." && parseInt(kpis[2].value) > 0
+                          ? `You have ${kpis[2].value} documents in the system. ${kpis[2].change.value} documents have been processed with AI analysis.`
+                          : "Upload your first document to start using AI-powered document analysis and insights."}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-business-50 rounded-md border border-business-100 text-sm">
+                      <span className="block font-medium mb-1 text-business-700">Financial Overview</span>
+                      <span>
+                        {kpis[0].value !== "Loading..." && kpis[0].value !== "$0.00"
+                          ? `Your current revenue is ${kpis[0].value}. ${kpis[0].trend === "up" ? "Revenue is trending upward." : "Consider strategies to increase revenue."}`
+                          : "Set up your financial accounts to start tracking revenue and expenses."}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

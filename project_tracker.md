@@ -96,6 +96,12 @@ Phase 1: Core Business Functions (Weeks 13–20) – COMPLETED
 
 Beta 1.0 (Weeks 21-26) – UPCOMING
 • Sprint B1: Core Admin & Security – PLANNED
+  - User registration with Admin role assignment - COMPLETED
+  - Automatic employee creation for new users - COMPLETED
+  - Company profile setup flow for new Admins - COMPLETED
+  - Dashboard with real-time data display - COMPLETED
+  - Fixed RLS policies for proper data access - COMPLETED
+  - Audit logging for user actions - COMPLETED
 • Sprint B2: Document Management & Collaboration – PLANNED
 • Sprint B3: Finance & Project Management – PLANNED
 

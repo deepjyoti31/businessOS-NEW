@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
 // Route paths
 export const ROUTES = {
   HOME: '/',
+  APP_HOME: '/app',
   LOGIN: '/login',
   REGISTER: '/register',
   DASHBOARD: '/dashboard',
@@ -50,6 +51,7 @@ export const ROUTES = {
 
 // Public routes that don't require authentication
 export const PUBLIC_ROUTES = [
+  ROUTES.HOME,
   ROUTES.LOGIN,
   ROUTES.REGISTER,
   '/reset-password',

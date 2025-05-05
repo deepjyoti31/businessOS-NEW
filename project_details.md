@@ -585,6 +585,26 @@ BusinessOS is an AI-first business management platform designed for small busine
 3. Token included in API requests for authentication
 4. Backend validates token with Supabase
 
+### User Registration and Onboarding
+1. New users are automatically assigned the Admin role
+2. An employee record is automatically created for each new user
+3. After registration, new Admins are directed to set up their company profile
+4. When an Admin adds new users, those users are also automatically added as employees
+5. Database triggers handle role assignment and employee creation automatically
+
+### Dashboard and Data Display
+1. Main dashboard displays real-time data from various services
+2. KPIs show actual metrics for revenue, employees, documents, and departments
+3. Recent activity section displays audit logs of user actions
+4. AI Insights provide contextual information based on actual system data
+5. Error handling ensures dashboard continues to function even with data fetch issues
+
+### Row Level Security (RLS)
+1. Supabase RLS policies control data access based on user roles
+2. Admin users have access to all data across the system
+3. Regular users have access only to their own data and shared resources
+4. Policies are designed to avoid circular dependencies that could cause infinite recursion
+
 ### Security Measures
 - Row Level Security (RLS) policies in Supabase
 - Role-based access control for API endpoints
