@@ -218,6 +218,42 @@ BusinessOS is an AI-first business management platform designed for small busine
   - role_id (references roles.id)
   - created_at (timestamp)
 
+#### Human Resources
+- **employees**: Employee information
+  - id (UUID)
+  - user_id (UUID, references auth.users.id, nullable)
+  - first_name (string)
+  - last_name (string)
+  - email (string)
+  - phone (string, nullable)
+  - position (string)
+  - department (string)
+  - manager_id (UUID, references employees.id, nullable)
+  - hire_date (date)
+  - employment_type (string, 'Full-time', 'Part-time', 'Contract', 'Intern')
+  - status (string, 'Active', 'On Leave', 'Terminated')
+  - address (string, nullable)
+  - city (string, nullable)
+  - state (string, nullable)
+  - zip (string, nullable)
+  - country (string, nullable)
+  - emergency_contact_name (string, nullable)
+  - emergency_contact_phone (string, nullable)
+  - emergency_contact_relationship (string, nullable)
+  - salary (decimal, nullable)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
+- **departments**: Department information
+  - id (UUID)
+  - name (string)
+  - description (text, nullable)
+  - manager_id (UUID, references employees.id, nullable)
+  - created_at (timestamp)
+  - updated_at (timestamp)
+  - is_deleted (boolean)
+
 #### System Settings
 - **company_profile**: Company information
   - id (UUID)
@@ -443,6 +479,57 @@ BusinessOS is an AI-first business management platform designed for small busine
 
 - **DELETE /api/roles/{role_id}**
   - Delete role
+  - Response: Success status
+
+### Human Resources Management
+
+#### Employee Operations
+- **GET /api/hr/employees**
+  - Get all employees with optional filtering, pagination, and sorting
+  - Query Parameters: page, page_size, sort_by, sort_order, search, department, status, employment_type, hire_date_from, hire_date_to
+  - Response: List of employees with pagination info
+
+- **GET /api/hr/employees/{employee_id}**
+  - Get a specific employee by ID
+  - Response: Employee details
+
+- **POST /api/hr/employees**
+  - Create a new employee
+  - Request: Employee creation parameters (first_name, last_name, email, phone, position, department, manager_id, hire_date, employment_type, status, etc.)
+  - Response: Created employee details
+
+- **PUT /api/hr/employees/{employee_id}**
+  - Update an employee
+  - Request: Employee update parameters
+  - Response: Updated employee details
+
+- **DELETE /api/hr/employees/{employee_id}**
+  - Delete an employee (soft delete by default)
+  - Query Parameters: hard_delete (boolean)
+  - Response: Success status
+
+#### Department Operations
+- **GET /api/hr/departments**
+  - Get all departments
+  - Response: List of departments with employee counts
+
+- **GET /api/hr/departments/{department_id}**
+  - Get a specific department by ID
+  - Response: Department details with employees
+
+- **POST /api/hr/departments**
+  - Create a new department
+  - Request: Department creation parameters (name, description, manager_id)
+  - Response: Created department details
+
+- **PUT /api/hr/departments/{department_id}**
+  - Update a department
+  - Request: Department update parameters
+  - Response: Updated department details
+
+- **DELETE /api/hr/departments/{department_id}**
+  - Delete a department
+  - Query Parameters: hard_delete (boolean)
   - Response: Success status
 
 ### System Settings

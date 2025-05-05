@@ -374,7 +374,13 @@ Sprint B3: Finance & Project Management – PLANNED
 Phase 2: Operations (W31–42, Sprints 15–20)
 Sprint 15–16: Project Management (Gantt, milestones, resource heatmaps)
 Sprint 17–18: Task Management (deadlines, priorities, notifications)
-Sprint 19–20: Basic HR (employee profiles, time‑sheets, leave, perf notes)
+Sprint 19–20: Basic HR (employee profiles, time‑sheets, leave, perf notes) - COMPLETED
+  - Employee Management UI - COMPLETED
+    - Employee list with filtering, sorting, and pagination - COMPLETED
+    - Employee detail/edit page with tabbed sections - COMPLETED
+    - Employee creation and deletion - COMPLETED
+  - HR Dashboard with real-time statistics - COMPLETED
+  - Department Management - COMPLETED
 
 Phase 3: Customer Facing (W43–54, Sprints 21–26)
 Sprint 21–22: Sales Pipeline (leads, deals, forecasting)
