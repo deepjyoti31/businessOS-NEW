@@ -1,34 +1,95 @@
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Users, UserCheck, Clock, BarChart2 } from "lucide-react";
+import { Users, UserCheck, Clock, BarChart2, Loader2 } from "lucide-react";
+import HRService from "@/services/HRService";
+import { useToast } from "@/components/ui/use-toast";
+import { format, formatDistanceToNow } from "date-fns";
+
+// Helper function to format dates in a user-friendly way
+const formatDate = (dateString: string) => {
+  try {
+    const date = new Date(dateString);
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch (error) {
+    return "Invalid date";
+  }
+};
 
 const HRDashboard = () => {
-  // Quick stats
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [activeEmployees, setActiveEmployees] = useState(0);
+  const [onLeaveEmployees, setOnLeaveEmployees] = useState(0);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [recentHires, setRecentHires] = useState<any[]>([]);
+
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch employees
+        const employeesResponse = await HRService.getEmployees(1, 100);
+        setTotalEmployees(employeesResponse.pagination.total_count);
+
+        // Count active and on leave employees
+        const active = employeesResponse.items.filter(emp => emp.status === "Active").length;
+        const onLeave = employeesResponse.items.filter(emp => emp.status === "On Leave").length;
+        setActiveEmployees(active);
+        setOnLeaveEmployees(onLeave);
+
+        // Get recent hires (sort by hire date descending)
+        const sortedEmployees = [...employeesResponse.items].sort((a, b) =>
+          new Date(b.hire_date).getTime() - new Date(a.hire_date).getTime()
+        );
+        setRecentHires(sortedEmployees.slice(0, 3));
+
+        // Fetch departments
+        const departmentsData = await HRService.getDepartments();
+        setDepartments(departmentsData.map(dept => dept.name));
+      } catch (error) {
+        console.error("Error fetching HR dashboard data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load HR dashboard data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [toast]);
+
+  // Quick stats with real data
   const quickStats = [
     {
       title: "Total Employees",
-      value: "27",
-      change: "+3 this quarter",
+      value: isLoading ? "..." : totalEmployees.toString(),
+      change: isLoading ? "Loading..." : `${activeEmployees} active, ${onLeaveEmployees} on leave`,
       icon: <Users className="h-5 w-5 text-blue-600" />
     },
     {
-      title: "Open Positions",
-      value: "4",
-      change: "2 in final interviews",
+      title: "Departments",
+      value: isLoading ? "..." : departments.length.toString(),
+      change: isLoading ? "Loading..." : "Active departments",
       icon: <UserCheck className="h-5 w-5 text-green-600" />
     },
     {
-      title: "Time Off Requests",
-      value: "8",
-      change: "3 pending approval",
+      title: "Recent Hires",
+      value: isLoading ? "..." : recentHires.length.toString(),
+      change: isLoading ? "Loading..." : "In the last 30 days",
       icon: <Clock className="h-5 w-5 text-amber-600" />
     },
     {
-      title: "Avg. Performance",
-      value: "8.2",
-      change: "+0.4 vs. last review",
+      title: "Employee Retention",
+      value: isLoading ? "..." : "100%",
+      change: isLoading ? "Loading..." : "No terminations this quarter",
       icon: <BarChart2 className="h-5 w-5 text-purple-600" />
     }
   ];
@@ -107,7 +168,7 @@ const HRDashboard = () => {
             </div>
           </CardContent>
         </Card>
-        
+
         {/* AI HR Assistant */}
         <Card>
           <CardHeader>
@@ -117,18 +178,36 @@ const HRDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-3 bg-blue-50 rounded-md border border-blue-100 text-sm">
-              <span className="block font-medium mb-1 text-blue-700">Hiring Recommendation</span>
-              <span>Based on current team composition, you should prioritize hiring a UX Designer to balance your engineering team.</span>
-            </div>
-            <div className="p-3 bg-amber-50 rounded-md border border-amber-100 text-sm">
-              <span className="block font-medium mb-1 text-amber-700">Employee Satisfaction</span>
-              <span>Recent feedback suggests scheduling flexibility is the top request from employees.</span>
-            </div>
-            <Button className="w-full">Ask HR Assistant</Button>
+            {isLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-100 text-sm">
+                  <span className="block font-medium mb-1 text-blue-700">Department Analysis</span>
+                  <span>
+                    {departments.length > 0
+                      ? `You have ${departments.length} departments with ${totalEmployees} employees. Consider reviewing department balance.`
+                      : "You haven't set up any departments yet. Start by creating departments and assigning employees."}
+                  </span>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-100 text-sm">
+                  <span className="block font-medium mb-1 text-amber-700">Employee Status</span>
+                  <span>
+                    {totalEmployees > 0
+                      ? `${activeEmployees} active employees (${Math.round((activeEmployees / totalEmployees) * 100)}% of workforce), ${onLeaveEmployees} on leave.`
+                      : "No employees in the system yet. Start by adding your first employee."}
+                  </span>
+                </div>
+                <Link to="/dashboard/ai-assistants">
+                  <Button className="w-full">Ask HR Assistant</Button>
+                </Link>
+              </>
+            )}
           </CardContent>
         </Card>
-        
+
         {/* Recent HR Activity */}
         <Card>
           <CardHeader>
@@ -138,40 +217,67 @@ const HRDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex gap-3 items-start">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <UserCheck className="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">New employee onboarded</p>
-                  <p className="text-xs text-muted-foreground">Alex Johnson joined as Senior Developer</p>
-                  <p className="text-xs text-muted-foreground mt-1">2 days ago</p>
-                </div>
+            {isLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-              
-              <div className="flex gap-3 items-start">
-                <div className="bg-green-100 p-2 rounded-full">
-                  <Clock className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Time off request approved</p>
-                  <p className="text-xs text-muted-foreground">Emily Davis - 5 days vacation</p>
-                  <p className="text-xs text-muted-foreground mt-1">3 days ago</p>
-                </div>
+            ) : recentHires.length > 0 ? (
+              <div className="space-y-4">
+                {recentHires.map((employee, index) => (
+                  <div key={employee.id} className="flex gap-3 items-start">
+                    <div className="bg-blue-100 p-2 rounded-full">
+                      <UserCheck className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">New employee onboarded</p>
+                      <p className="text-xs text-muted-foreground">
+                        {employee.first_name} {employee.last_name} joined as {employee.position}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDate(employee.hire_date)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {recentHires.length < 3 && (
+                  <div className="flex gap-3 items-start">
+                    <div className="bg-green-100 p-2 rounded-full">
+                      <Clock className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Department Distribution</p>
+                      <p className="text-xs text-muted-foreground">
+                        {departments.length} active departments with employees
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Updated today</p>
+                    </div>
+                  </div>
+                )}
+
+                {recentHires.length < 2 && (
+                  <div className="flex gap-3 items-start">
+                    <div className="bg-purple-100 p-2 rounded-full">
+                      <BarChart2 className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Employee Status</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activeEmployees} active, {onLeaveEmployees} on leave
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Updated today</p>
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              <div className="flex gap-3 items-start">
-                <div className="bg-purple-100 p-2 rounded-full">
-                  <BarChart2 className="h-4 w-4 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Performance review completed</p>
-                  <p className="text-xs text-muted-foreground">4 team members in Engineering</p>
-                  <p className="text-xs text-muted-foreground mt-1">1 week ago</p>
-                </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <p>No recent HR activity to display</p>
+                <Button variant="outline" className="mt-2" asChild>
+                  <Link to="/dashboard/hr/employees/new">Add First Employee</Link>
+                </Button>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

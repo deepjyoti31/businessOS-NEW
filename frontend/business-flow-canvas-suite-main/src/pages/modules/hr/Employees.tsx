@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -19,90 +20,97 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useToast } from "@/components/ui/use-toast";
+import { format } from "date-fns";
+import { Loader2, UserPlus, Download, Filter } from "lucide-react";
+import HRService, { Employee, EmployeeFilter } from "@/services/HRService";
 
 const HREmployees = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState("all");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [activeEmployees, setActiveEmployees] = useState(0);
+  const [onLeaveEmployees, setOnLeaveEmployees] = useState(0);
+  const [averageTenure, setAverageTenure] = useState(0);
 
-  // Mock employees data
-  const employees = [
-    {
-      id: "EMP001",
-      name: "Alex Johnson",
-      email: "alex.johnson@example.com",
-      department: "Engineering",
-      position: "Senior Developer",
-      status: "Active",
-      joinDate: "2023-06-15",
-    },
-    {
-      id: "EMP002",
-      name: "Sarah Wilson",
-      email: "sarah.wilson@example.com",
-      department: "Marketing",
-      position: "Marketing Manager",
-      status: "Active",
-      joinDate: "2023-08-01",
-    },
-    {
-      id: "EMP003",
-      name: "Michael Brown",
-      email: "michael.brown@example.com",
-      department: "Finance",
-      position: "Financial Analyst",
-      status: "Active",
-      joinDate: "2024-01-10",
-    },
-    {
-      id: "EMP004",
-      name: "Emily Davis",
-      email: "emily.davis@example.com",
-      department: "HR",
-      position: "HR Specialist",
-      status: "On Leave",
-      joinDate: "2022-11-05",
-    },
-    {
-      id: "EMP005",
-      name: "David Martinez",
-      email: "david.martinez@example.com",
-      department: "Engineering",
-      position: "QA Engineer",
-      status: "Active",
-      joinDate: "2024-02-20",
-    },
-    {
-      id: "EMP006",
-      name: "Lisa Anderson",
-      email: "lisa.anderson@example.com",
-      department: "Sales",
-      position: "Sales Representative",
-      status: "Active",
-      joinDate: "2023-09-12",
-    },
-  ];
+  // Fetch employees data
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      setIsLoading(true);
+      try {
+        // Prepare filter
+        const filter: EmployeeFilter = {
+          search: searchTerm || undefined,
+          department: departmentFilter !== "all" ? departmentFilter : undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+          employment_type: employmentTypeFilter !== "all" ? employmentTypeFilter : undefined,
+        };
 
-  // Filter employees based on search term and department filter
-  const filteredEmployees = employees.filter((employee) => {
-    const matchesSearch = 
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.position.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDepartment = 
-      departmentFilter === "all" || 
-      employee.department.toLowerCase() === departmentFilter.toLowerCase();
-    
-    return matchesSearch && matchesDepartment;
-  });
+        // Fetch employees
+        const response = await HRService.getEmployees(
+          page,
+          pageSize,
+          "last_name",
+          "asc",
+          filter
+        );
+
+        setEmployees(response.items);
+        setTotalPages(response.pagination.total_pages);
+        setTotalEmployees(response.pagination.total_count);
+
+        // Count active and on leave employees
+        const active = response.items.filter(emp => emp.status === "Active").length;
+        const onLeave = response.items.filter(emp => emp.status === "On Leave").length;
+        setActiveEmployees(active);
+        setOnLeaveEmployees(onLeave);
+
+        // Calculate average tenure
+        const now = new Date();
+        const totalDays = response.items.reduce((sum, emp) => {
+          const hireDate = new Date(emp.hire_date);
+          const diffTime = Math.abs(now.getTime() - hireDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return sum + diffDays;
+        }, 0);
+
+        const avgYears = totalDays / 365 / response.items.length || 0;
+        setAverageTenure(parseFloat(avgYears.toFixed(1)));
+
+        // Fetch departments for filter
+        const departmentsData = await HRService.getDepartments();
+        const uniqueDepartments = Array.from(
+          new Set(departmentsData.map(dept => dept.name))
+        );
+        setDepartments(uniqueDepartments);
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load employees data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEmployees();
+  }, [page, pageSize, searchTerm, departmentFilter, statusFilter, employmentTypeFilter, toast]);
 
   // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase();
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
   // Get status badge class
@@ -119,8 +127,42 @@ const HREmployees = () => {
     }
   };
 
-  // List of departments for filter
-  const departments = ["Engineering", "Marketing", "Finance", "HR", "Sales", "Operations"];
+  // Export employees to CSV
+  const exportToCSV = () => {
+    if (employees.length === 0) return;
+
+    const headers = [
+      "ID", "First Name", "Last Name", "Email", "Position",
+      "Department", "Hire Date", "Status", "Employment Type"
+    ];
+
+    const csvData = employees.map(emp => [
+      emp.id,
+      emp.first_name,
+      emp.last_name,
+      emp.email,
+      emp.position,
+      emp.department,
+      emp.hire_date,
+      emp.status,
+      emp.employment_type
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...csvData.map(row => row.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `employees_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="space-y-6">
@@ -139,39 +181,62 @@ const HREmployees = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full md:w-60"
           />
-          <Select
-            value={departmentFilter}
-            onValueChange={setDepartmentFilter}
-          >
-            <SelectTrigger className="w-full md:w-40">
-              <SelectValue placeholder="Filter by department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {departments.map((dept) => (
-                <SelectItem key={dept} value={dept.toLowerCase()}>{dept}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select
+              value={departmentFilter}
+              onValueChange={setDepartmentFilter}
+            >
+              <SelectTrigger className="w-full md:w-40">
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger className="w-full md:w-32">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="On Leave">On Leave</SelectItem>
+                <SelectItem value="Terminated">Terminated</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={employmentTypeFilter}
+              onValueChange={setEmploymentTypeFilter}
+            >
+              <SelectTrigger className="w-full md:w-40">
+                <SelectValue placeholder="Employment Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Full-time">Full-time</SelectItem>
+                <SelectItem value="Part-time">Part-time</SelectItem>
+                <SelectItem value="Contract">Contract</SelectItem>
+                <SelectItem value="Intern">Intern</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Button>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mr-2"
-          >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Employee
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={() => navigate("/dashboard/hr/employees/new")}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add Employee
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -180,8 +245,10 @@ const HREmployees = () => {
             <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">27</div>
-            <p className="text-xs text-muted-foreground">+3 this quarter</p>
+            <div className="text-2xl font-bold">{totalEmployees}</div>
+            <p className="text-xs text-muted-foreground">
+              {isLoading ? "Loading..." : `${activeEmployees} active, ${onLeaveEmployees} on leave`}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -189,7 +256,7 @@ const HREmployees = () => {
             <CardTitle className="text-sm font-medium">Department Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">5</div>
+            <div className="text-2xl font-bold">{departments.length}</div>
             <p className="text-xs text-muted-foreground">Active departments</p>
           </CardContent>
         </Card>
@@ -198,7 +265,7 @@ const HREmployees = () => {
             <CardTitle className="text-sm font-medium">Average Tenure</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1.3</div>
+            <div className="text-2xl font-bold">{averageTenure}</div>
             <p className="text-xs text-muted-foreground">Years per employee</p>
           </CardContent>
         </Card>
@@ -207,78 +274,128 @@ const HREmployees = () => {
             <CardTitle className="text-sm font-medium">On Leave</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2</div>
-            <p className="text-xs text-muted-foreground">7.4% of workforce</p>
+            <div className="text-2xl font-bold">{onLeaveEmployees}</div>
+            <p className="text-xs text-muted-foreground">
+              {totalEmployees > 0
+                ? `${((onLeaveEmployees / totalEmployees) * 100).toFixed(1)}% of workforce`
+                : "0% of workforce"}
+            </p>
           </CardContent>
         </Card>
       </div>
-          
+
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Position</TableHead>
-                <TableHead>Join Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEmployees.length > 0 ? (
-                filteredEmployees.map((employee) => (
-                  <TableRow key={employee.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src="" />
-                          <AvatarFallback>{getInitials(employee.name)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{employee.name}</div>
-                          <div className="text-xs text-muted-foreground">{employee.email}</div>
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Position</TableHead>
+                  <TableHead>Hire Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employees.length > 0 ? (
+                  employees.map((employee) => (
+                    <TableRow key={employee.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarImage src="" />
+                            <AvatarFallback>{getInitials(employee.first_name, employee.last_name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium">{employee.first_name} {employee.last_name}</div>
+                            <div className="text-xs text-muted-foreground">{employee.email}</div>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{employee.department}</TableCell>
-                    <TableCell>{employee.position}</TableCell>
-                    <TableCell>{employee.joinDate}</TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeClass(employee.status)}`}
-                      >
-                        {employee.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm">View</Button>
-                        <Button variant="ghost" size="sm">Edit</Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>{employee.department}</TableCell>
+                      <TableCell>{employee.position}</TableCell>
+                      <TableCell>{format(new Date(employee.hire_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeClass(employee.status)}`}
+                        >
+                          {employee.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/dashboard/hr/employees/${employee.id}`)}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              navigate(`/dashboard/hr/employees/${employee.id}`);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      No employees found matching your search.
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                    No employees found matching your search.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-end space-x-2">
-        <Button variant="outline" size="sm">Previous</Button>
-        <Button variant="outline" size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">1</Button>
-        <Button variant="outline" size="sm">2</Button>
-        <Button variant="outline" size="sm">Next</Button>
-      </div>
-      
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1 || isLoading}
+          >
+            Previous
+          </Button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <Button
+              key={p}
+              variant="outline"
+              size="sm"
+              className={p === page ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}
+              onClick={() => setPage(p)}
+              disabled={isLoading}
+            >
+              {p}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages || isLoading}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>AI HR Assistant</CardTitle>

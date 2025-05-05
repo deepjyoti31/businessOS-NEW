@@ -38,6 +38,12 @@ export const ROUTES = {
   FINANCE_INVOICE_CREATE: '/dashboard/finance/invoices/create',
   FINANCE_INVOICE_EDIT: '/dashboard/finance/invoices/edit',
   FINANCE_INVOICE_DETAILS: '/dashboard/finance/invoices',
+  HR: '/dashboard/hr',
+  HR_EMPLOYEES: '/dashboard/hr/employees',
+  HR_EMPLOYEE_DETAIL: '/dashboard/hr/employees',
+  HR_RECRUITMENT: '/dashboard/hr/recruitment',
+  HR_TIME_OFF: '/dashboard/hr/time-off',
+  HR_PERFORMANCE: '/dashboard/hr/performance',
   ADMIN: '/dashboard/admin',
   SETTINGS: '/dashboard/settings',
 };

@@ -78,6 +78,7 @@ import InvoiceDetails from "./pages/modules/finance/InvoiceDetails";
 // HR Subpages
 import HRDashboard from "./pages/modules/hr/Dashboard";
 import HREmployees from "./pages/modules/hr/Employees";
+import HREmployeeDetail from "./pages/modules/hr/EmployeeDetail";
 import HRRecruitment from "./pages/modules/hr/Recruitment";
 import HRTimeOff from "./pages/modules/hr/TimeOff";
 import HRPerformance from "./pages/modules/hr/Performance";
@@ -163,6 +164,7 @@ const App = () => (
               <Route path="hr">
                 <Route index element={<HRDashboard />} />
                 <Route path="employees" element={<HREmployees />} />
+                <Route path="employees/:employeeId" element={<HREmployeeDetail />} />
                 <Route path="recruitment" element={<HRRecruitment />} />
                 <Route path="time-off" element={<HRTimeOff />} />
                 <Route path="performance" element={<HRPerformance />} />
